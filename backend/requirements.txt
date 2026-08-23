@@ -1,42 +1,38 @@
 # Core
-Django==4.2.23
-djangorestframework==3.18.0
-djangorestframework-simplejwt==5.5.1
-django-cors-headers==4.9.0
-gunicorn==23.0.0
+Django>=4.2,<5.0
+djangorestframework>=3.14
+djangorestframework-simplejwt>=5.3
+django-cors-headers>=4.3
+gunicorn>=21.2
 
 # Database
-psycopg2-binary==2.9.9
-dj-database-url==2.1.0
+psycopg2-binary>=2.9
+dj-database-url>=2.1
 
 # Document Processing
-PyMuPDF==1.28.2
-pytesseract==0.3.13
-Pillow==11.3.0
-opencv-python-headless==4.11.0.86
+PyMuPDF>=1.23
+pytesseract>=0.3.10
+Pillow>=10.0
+opencv-python-headless>=4.8
 
 # NLP / AI
-spacy==3.8.13
-sentence-transformers==6.0.0
-faiss-cpu==1.15.0
+spacy>=3.7
+sentence-transformers>=2.2
+faiss-cpu>=1.7.4
 
 # Security / Cryptography
-cryptography==45.0.3
+cryptography>=41.0
 
 # Blockchain
-web3==7.16.0
+web3>=6.0
 
 # PDF Generation (for demo documents)
-fpdf2==2.8.8
+fpdf2>=2.7.8
 
 # Environment
-python-dotenv==1.1.1
+python-dotenv>=1.0
 
 # Testing
-pytest==8.4.1
-pytest-django==4.14.0
-requests==2.32.4
-
-# Utilities
-# Optional: google-generativeai  # For Gemini API (uncomment if using)
-# Optional: openai                # For OpenAI API (uncomment if using)
+pytest>=7.4
+pytest-django>=4.5
+requests>=2.31
