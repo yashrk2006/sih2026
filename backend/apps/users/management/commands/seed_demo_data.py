@@ -214,4 +214,79 @@ class Command(BaseCommand):
                 ip_address="127.0.0.1",
             )
 
+        # 4. Update Document Compliance settings
+        doc.legal_hold_status = True
+        doc.retention_category = "FORENSIC_RECORD"
+        doc.retention_end_date = timezone.now().date() + timezone.timedelta(days=365 * 10)  # 10 years
+        doc.save(update_fields=["legal_hold_status", "retention_category", "retention_end_date"])
+
+        # 5. Share Cases (Collaboration data)
+        from apps.users.models import AccessPermission
+        case_cv = created_cases["CASE-2026-CV-0412"]
+        case_cv.assigned_investigators.add(created_users["investigator1"])
+        AccessPermission.objects.get_or_create(
+            user=created_users["investigator1"],
+            case=case_cv,
+            permission_type="READ",
+            defaults={"granted_by": created_users["legal1"]},
+        )
+
+        # 6. Seed Police Assets
+        from apps.assets.models import Asset, AssetType, AssetStatus, AssetCondition
+
+        # Asset 1: Forensic Laptop
+        asset_laptop, created_a1 = Asset.objects.get_or_create(
+            asset_id="POL-EQ-0001",
+            defaults={
+                "asset_type": AssetType.LAPTOP,
+                "asset_name": "Dell Latitude Forensic Workstation",
+                "serial_number": "SN-DELL-88914A",
+                "department": "Financial Fraud Wing",
+                "current_holder": created_users["investigator1"],
+                "case": created_cases["CASE-2026-CR-0891"],
+                "status": AssetStatus.ASSIGNED,
+                "condition": AssetCondition.EXCELLENT,
+                "location": "Locker Room B",
+                "notes": "Equipped with Tableau T8u Write Blocker.",
+            }
+        )
+        if not created_a1:
+            asset_laptop.current_holder = created_users["investigator1"]
+            asset_laptop.case = created_cases["CASE-2026-CR-0891"]
+            asset_laptop.status = AssetStatus.ASSIGNED
+            asset_laptop.save()
+
+        # Asset 2: Seized Hard Drive
+        asset_hdd, created_a2 = Asset.objects.get_or_create(
+            asset_id="POL-EQ-0002",
+            defaults={
+                "asset_type": AssetType.STORAGE,
+                "asset_name": "Seized WD Passport 2TB",
+                "serial_number": "SN-WD-229410B",
+                "department": "Cyber Cell Laboratory",
+                "status": AssetStatus.MAINTENANCE,
+                "condition": AssetCondition.GOOD,
+                "location": "Hardware Lab 3",
+                "notes": "Sent for hardware decryption/cloning.",
+            }
+        )
+        if not created_a2:
+            asset_hdd.status = AssetStatus.MAINTENANCE
+            asset_hdd.save()
+
+        # Log asset transition history in audit trail
+        from apps.audit.utils import log_audit_event
+        log_audit_event(
+            actor=created_users["admin"],
+            action="SYSTEM_EVENT",
+            details=f"Asset POL-EQ-0001 (Dell Latitude Forensic Workstation) status set to ASSIGNED to Rajesh Kumar",
+            result="SUCCESS",
+        )
+        log_audit_event(
+            actor=created_users["admin"],
+            action="SYSTEM_EVENT",
+            details=f"Asset POL-EQ-0002 (Seized WD Passport 2TB) status set to MAINTENANCE",
+            result="SUCCESS",
+        )
+
         self.stdout.write(self.style.SUCCESS("[OK] Seed completed successfully!"))

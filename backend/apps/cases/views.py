@@ -94,3 +94,91 @@ def case_documents(request, case_id):
     accessible = [d for d in documents if user_can_access_document(request.user, d)]
     serializer = DocumentListSerializer(accessible, many=True)
     return Response(serializer.data)
+
+
+@api_view(["POST", "DELETE"])
+@permission_classes([IsAuthenticated])
+def share_case(request, case_id):
+    """
+    POST /api/cases/{case_id}/share/ - Share case dossier with an officer.
+    DELETE /api/cases/{case_id}/share/ - Revoke case dossier access from an officer.
+    """
+    try:
+        case = Case.objects.get(case_id=case_id)
+    except Case.DoesNotExist:
+        return Response({"error": "Case not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    # Only case creator or admin can change sharing permissions
+    if not (request.user.role == "ADMIN" or case.created_by == request.user):
+        return Response({"error": "Only the case creator or administrators can change sharing permissions"}, status=status.HTTP_403_FORBIDDEN)
+
+    from apps.users.models import User, AccessPermission
+    username = request.data.get("username")
+
+    if not username:
+        return Response({"error": "Username is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        user_to_change = User.objects.get(username=username)
+    except User.DoesNotExist:
+        return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == "DELETE":
+        # Remove user from case assignments
+        if user_to_change.role == "INVESTIGATOR":
+            case.assigned_investigators.remove(user_to_change)
+        elif user_to_change.role == "LEGAL_OFFICER":
+            case.assigned_legal_officers.remove(user_to_change)
+
+        # Delete any explicit AccessPermission record
+        AccessPermission.objects.filter(
+            user=user_to_change,
+            case=case
+        ).delete()
+
+        log_audit_event(
+            actor=request.user,
+            action="USER_PERMISSION_CHANGED",
+            case=case,
+            result="SUCCESS",
+            details=f"Revoked case {case_id} access from {username}",
+        )
+
+        return Response({
+            "case_id": case.case_id,
+            "revoked_user": username,
+            "status": "CASE_ACCESS_REVOKED"
+        })
+
+    else:
+        # POST - Share case
+        permission_type = request.data.get("permission", "READ")
+        
+        # Assign user to case m2m
+        if user_to_change.role == "INVESTIGATOR":
+            case.assigned_investigators.add(user_to_change)
+        elif user_to_change.role == "LEGAL_OFFICER":
+            case.assigned_legal_officers.add(user_to_change)
+
+        # Create permission record
+        AccessPermission.objects.get_or_create(
+            user=user_to_change,
+            case=case,
+            permission_type=permission_type,
+            defaults={"granted_by": request.user}
+        )
+
+        log_audit_event(
+            actor=request.user,
+            action="USER_PERMISSION_CHANGED",
+            case=case,
+            result="SUCCESS",
+            details=f"Shared case {case_id} with {username} (Permission: {permission_type})",
+        )
+
+        return Response({
+            "case_id": case.case_id,
+            "shared_with": username,
+            "permission": permission_type,
+            "status": "CASE_SHARED_SUCCESSFULLY"
+        })

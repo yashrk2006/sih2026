@@ -22,6 +22,31 @@ export const CaseManagement: React.FC<CaseManagementProps> = ({ currentUserRole 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Sharing states
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareUser, setShareUser] = useState('');
+  const [sharing, setSharing] = useState(false);
+
+  const handleShareCase = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedCase) return;
+    setSharing(true);
+    try {
+      const res = await api.post(`/cases/${selectedCase.case_id}/share/`, {
+        username: shareUser,
+        permission: 'READ'
+      });
+      alert(`Case dossier successfully shared with: ${res.data.shared_with}!`);
+      setShareOpen(false);
+      setShareUser('');
+      fetchCases();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to share case.');
+    } finally {
+      setSharing(false);
+    }
+  };
+
   useEffect(() => {
     fetchCases();
   }, []);
@@ -251,13 +276,20 @@ export const CaseManagement: React.FC<CaseManagementProps> = ({ currentUserRole 
           <div className="card">
             {selectedCase ? (
               <div>
-                <div className="card-header">
+                <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                     <span className="text-mono" style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--accent-hover)' }}>
                       {selectedCase.case_id}
                     </span>
                     <StatusBadge status={selectedCase.status || 'ACTIVE'} size="sm" />
                   </div>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+                    onClick={() => setShareOpen(true)}
+                  >
+                    Share Dossier
+                  </button>
                 </div>
 
                 <div style={{ padding: '1rem' }}>
@@ -349,6 +381,49 @@ export const CaseManagement: React.FC<CaseManagementProps> = ({ currentUserRole 
 
         </div>
       </div>
+
+      {/* Share Case Modal */}
+      {shareOpen && selectedCase && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '400px' }}>
+            <div className="modal-header">
+              <h3>Share Case Dossier: {selectedCase.case_id}</h3>
+              <button className="modal-close" onClick={() => setShareOpen(false)}>×</button>
+            </div>
+            <form onSubmit={handleShareCase}>
+              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  Enter the username of the Investigator or Legal Officer to assign them access to this case dossier.
+                </p>
+                <div>
+                  <label className="text-label">Officer Username</label>
+                  <input
+                    type="text"
+                    className="input"
+                    placeholder="e.g. investigator1"
+                    value={shareUser}
+                    onChange={(e) => setShareUser(e.target.value)}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-label">Access Level</label>
+                  <select className="select" defaultValue="READ">
+                    <option value="READ">Read-Only Access</option>
+                    <option value="WRITE">Read & Write Access</option>
+                  </select>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShareOpen(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={sharing}>
+                  {sharing ? 'Sharing...' : 'Share Dossier'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

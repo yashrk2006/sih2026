@@ -83,6 +83,12 @@ class Document(models.Model):
     )
     signed_at = models.DateTimeField(null=True, blank=True)
 
+    # Compliance & Retention Policy
+    retention_category = models.CharField(max_length=100, default="STANDARD")
+    retention_start_date = models.DateField(default=timezone.now)
+    retention_end_date = models.DateField(null=True, blank=True)
+    legal_hold_status = models.BooleanField(default=False, help_text="True if document is locked due to active court hold")
+
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -90,6 +96,11 @@ class Document(models.Model):
     class Meta:
         db_table = "documents_document"
         ordering = ["-created_at"]
+
+    def delete(self, *args, **kwargs):
+        if self.legal_hold_status:
+            raise PermissionError("This document is under legal hold and cannot be deleted.")
+        super().delete(*args, **kwargs)
 
     def __str__(self):
         return f"[{self.document_type}] {self.original_filename} (v{self.current_version})"

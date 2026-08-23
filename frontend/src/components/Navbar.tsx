@@ -22,6 +22,8 @@ import {
   Network,
   FileOutput,
   Upload,
+  HardDrive,
+  ClipboardList,
 } from 'lucide-react';
 import type { UserRole } from '../services/api';
 import { canAccessTab } from '../services/rbac';
@@ -56,6 +58,7 @@ const navGroups = [
       { id: 'documents', label: 'Documents', icon: FileText },
       { id: 'ingestion', label: 'Upload Evidence', icon: Upload },
       { id: 'search', label: 'Evidence Search', icon: SearchIcon },
+      { id: 'police_assets', label: 'Police Assets', icon: HardDrive },
     ],
   },
   {
@@ -65,6 +68,7 @@ const navGroups = [
       { id: 'signatures', label: 'Digital Signatures', icon: FileCheck },
       { id: 'audit', label: 'Audit Trail', icon: History },
       { id: 'blockchain', label: 'Blockchain Records', icon: LinkIcon },
+      { id: 'compliance', label: 'Compliance Overview', icon: ClipboardList },
     ],
   },
   {

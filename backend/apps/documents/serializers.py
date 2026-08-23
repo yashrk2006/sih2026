@@ -47,6 +47,7 @@ class DocumentSerializer(serializers.ModelSerializer):
             "case", "case_id_str",
             "case_association_method", "case_association_confidence", "case_association_reason",
             "signature", "signed_by", "signed_at",
+            "retention_category", "retention_start_date", "retention_end_date", "legal_hold_status",
             "created_at", "updated_at",
             "metadata", "versions",
         ]
@@ -69,6 +70,7 @@ class DocumentListSerializer(serializers.ModelSerializer):
             "id", "document_id", "original_filename", "document_type",
             "file_size", "sha256_hash", "current_version", "status",
             "case", "case_id_str", "uploaded_by_name", "created_at",
+            "retention_category", "retention_start_date", "retention_end_date", "legal_hold_status",
         ]
 
 

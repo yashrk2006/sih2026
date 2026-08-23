@@ -18,7 +18,9 @@ export type NavigationTab =
   | 'users_access'
   | 'system_settings'
   | 'graph'
-  | 'export';
+  | 'export'
+  | 'police_assets'
+  | 'compliance';
 
 export type Capability = 
   | 'canUploadDocument'
@@ -56,6 +58,8 @@ export const ROLE_PERMISSIONS: Record<UserRoleName, RoleConfig> = {
       'system_settings',
       'graph',
       'export',
+      'police_assets',
+      'compliance',
     ],
     capabilities: new Set<Capability>([
       'canUploadDocument',
@@ -84,6 +88,7 @@ export const ROLE_PERMISSIONS: Record<UserRoleName, RoleConfig> = {
       'ai_extraction',
       'graph',
       'export',
+      'police_assets',
     ],
     capabilities: new Set<Capability>([
       'canUploadDocument',
@@ -105,6 +110,7 @@ export const ROLE_PERMISSIONS: Record<UserRoleName, RoleConfig> = {
       'integrity',
       'signatures',
       'export',
+      'compliance',
     ],
     capabilities: new Set<Capability>([
       'canUploadDocument',
@@ -124,6 +130,8 @@ export const ROLE_PERMISSIONS: Record<UserRoleName, RoleConfig> = {
       'audit',
       'blockchain',
       'graph',
+      'police_assets',
+      'compliance',
     ],
     capabilities: new Set<Capability>([
       'canViewAudit',

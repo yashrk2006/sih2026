@@ -46,6 +46,22 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({ currentUserRol
     }
   };
 
+  const handleToggleLegalHold = async (currentStatus: boolean) => {
+    if (!selectedDoc) return;
+    try {
+      const docId = selectedDoc.document_id || (selectedDoc as any).id;
+      const res = await api.put(`/documents/${docId}/`, {
+        legal_hold_status: !currentStatus
+      });
+      setSelectedDoc(res.data);
+      alert(`Legal hold status successfully updated to: ${!currentStatus ? 'ON (Locked)' : 'OFF (Unlocked)'}`);
+      fetchDocuments();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to update compliance policies.');
+    }
+  };
+
+
   const safeDocs = ensureArray<DocumentItem>(documents);
 
   const filteredDocs = safeDocs.filter((d: any) => {
@@ -292,7 +308,7 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({ currentUserRol
                           </span>
                         </div>
                         <div>
-                          <span className="text-label" style={{ display: 'block', marginBottom: '0.125rem' }}>Storage</span>
+                          <span className="text-label" style={{ display: 'block', marginBottom: '0.125rem' }}>Storage Location</span>
                           <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
                             {selectedDoc.storage_location || 'Local Secure Disk'}
                           </span>
@@ -300,14 +316,70 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({ currentUserRol
                         <div>
                           <span className="text-label" style={{ display: 'block', marginBottom: '0.125rem' }}>Uploaded By</span>
                           <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
-                            {selectedDoc.uploaded_by || 'admin'}
+                            {(selectedDoc as any).uploaded_by_name || 'admin'}
                           </span>
+                        </div>
+                        <div>
+                          <span className="text-label" style={{ display: 'block', marginBottom: '0.125rem' }}>Retention Policy</span>
+                          <span style={{ fontSize: '0.8125rem', color: 'var(--text-primary)', fontWeight: 500 }}>
+                            {(selectedDoc as any).retention_category || 'STANDARD'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-label" style={{ display: 'block', marginBottom: '0.125rem' }}>Legal Hold Status</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.125rem' }}>
+                            <span style={{
+                              fontSize: '0.6875rem', fontWeight: 700, padding: '0.15rem 0.35rem', borderRadius: '0.25rem',
+                              background: (selectedDoc as any).legal_hold_status ? 'rgba(239,68,68,0.15)' : 'rgba(16,185,129,0.15)',
+                              color: (selectedDoc as any).legal_hold_status ? '#ef4444' : '#10b981'
+                            }}>
+                              {(selectedDoc as any).legal_hold_status ? 'HOLD ACTIVE' : 'NO HOLD'}
+                            </span>
+                            {(currentUserRole === 'ADMIN' || currentUserRole === 'LEGAL_OFFICER') && (
+                              <button
+                                className="btn btn-secondary btn-sm"
+                                style={{ padding: '0.1rem 0.35rem', fontSize: '0.6875rem', height: 'auto' }}
+                                onClick={() => handleToggleLegalHold((selectedDoc as any).legal_hold_status)}
+                              >
+                                {(selectedDoc as any).legal_hold_status ? 'Release' : 'Apply'}
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
 
                       <div>
                         <div className="text-label" style={{ marginBottom: '0.25rem' }}>SHA-256 Hash</div>
                         <HashDisplay hash={selectedDoc.sha256_hash || '—'} />
+                      </div>
+
+                      {/* Visual Timeline for Chain of Custody */}
+                      <div style={{ marginTop: '0.5rem' }}>
+                        <div className="text-label" style={{ marginBottom: '0.5rem' }}>Evidence Chain of Custody</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem', paddingLeft: '0.625rem', borderLeft: '2px dashed var(--color-border)' }}>
+                          <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '0.125rem' }}>
+                            <div style={{ position: 'absolute', left: '-13px', top: '4px', width: '6px', height: '6px', borderRadius: '50%', background: '#10b981' }}></div>
+                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-primary)' }}>1. Evidence Ingestion</span>
+                            <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>Uploaded by {(selectedDoc as any).uploaded_by_name || 'officer'} on {selectedDoc.created_at ? new Date(selectedDoc.created_at).toLocaleDateString() : '—'}</span>
+                          </div>
+                          <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '0.125rem' }}>
+                            <div style={{ position: 'absolute', left: '-13px', top: '4px', width: '6px', height: '6px', borderRadius: '50%', background: '#10b981' }}></div>
+                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-primary)' }}>2. Cryptographic Ingestion Lock</span>
+                            <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>Encrypted using AES-256 (Fernet) & SHA-256 digest cataloged</span>
+                          </div>
+                          <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '0.125rem' }}>
+                            <div style={{ position: 'absolute', left: '-13px', top: '4px', width: '6px', height: '6px', borderRadius: '50%', background: (selectedDoc as any).signature ? '#10b981' : '#f59e0b' }}></div>
+                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-primary)' }}>3. Digital Signature Attestation</span>
+                            <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
+                              {(selectedDoc as any).signature ? `Digitally signed by Legal Officer` : 'Awaiting prosecution attorney digital signature'}
+                            </span>
+                          </div>
+                          <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '0.125rem' }}>
+                            <div style={{ position: 'absolute', left: '-13px', top: '4px', width: '6px', height: '6px', borderRadius: '50%', background: '#8b5cf6' }}></div>
+                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-primary)' }}>4. Immutable Anchoring</span>
+                            <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>Linked to Solidity smart contract ledger</span>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   )}

@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     "apps.search",
     "apps.blockchain",
     "apps.system_settings",
+    "apps.assets",
 ]
 
 MIDDLEWARE = [

@@ -30,4 +30,5 @@ urlpatterns = [
     path("api/", include("apps.search.urls")),
     path("api/", include("apps.blockchain.urls")),
     path("api/", include("apps.system_settings.urls")),
+    path("api/", include("apps.assets.urls")),
 ]

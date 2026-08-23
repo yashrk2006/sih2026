@@ -19,6 +19,8 @@ import { CommandPalette } from './components/CommandPalette';
 import { OfflineBanner } from './components/OfflineBanner';
 import { IntelligenceGraph } from './components/IntelligenceGraph';
 import { Section65BExport } from './components/Section65BExport';
+import { PoliceAssets } from './components/PoliceAssets';
+import { ComplianceDashboard } from './components/ComplianceDashboard';
 import { api, getAccessToken, setAuthTokens, clearAuthTokens } from './services/api';
 import type { UserRole } from './services/api';
 import { canAccessTab } from './services/rbac';
@@ -181,6 +183,8 @@ export function App() {
               {(activeTab === 'system_settings' || activeTab === 'settings') && <SystemSettings />}
               {activeTab === 'graph' && <IntelligenceGraph />}
               {activeTab === 'export' && <Section65BExport />}
+              {activeTab === 'police_assets' && <PoliceAssets />}
+              {activeTab === 'compliance' && <ComplianceDashboard />}
             </>
           )}
         </div>

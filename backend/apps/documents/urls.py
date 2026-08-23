@@ -4,6 +4,7 @@ from . import views
 from apps.search.views import search as evidence_search_view
 
 urlpatterns = [
+    path("compliance/", views.compliance_overview, name="compliance-overview"),
     path("documents/", views.document_list, name="document-list"),
     path("documents/search/", evidence_search_view, name="document-search"),
     path("evidence/search/", evidence_search_view, name="evidence-search"),
