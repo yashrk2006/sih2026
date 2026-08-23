@@ -84,11 +84,14 @@ if DATABASE_URL and (DATABASE_URL.startswith("postgres://") or DATABASE_URL.star
     import dj_database_url  # type: ignore
     DATABASES = {"default": dj_database_url.parse(DATABASE_URL)}
 else:
-    if not DEBUG:
-        raise ImproperlyConfigured(
-            "Production mode (DEBUG=False) requires a valid PostgreSQL DATABASE_URL. "
-            "SQLite database is not permitted in production."
-        )
+    import sys
+    # Enforce PostgreSQL in production or on Render runtime
+    if not DEBUG or os.environ.get("RENDER") == "true":
+        if "collectstatic" not in sys.argv:
+            raise ImproperlyConfigured(
+                "Production/Render mode requires a valid PostgreSQL DATABASE_URL. "
+                "SQLite database is not permitted."
+            )
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
