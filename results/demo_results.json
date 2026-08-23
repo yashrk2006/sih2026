@@ -1,0 +1,151 @@
+{
+  "timestamp": "2026-08-22 00:18:53",
+  "checkpoints": {
+    "1_base_setup": {
+      "status": "PASSED",
+      "details": "Database connected. Users=6, Cases=8, Docs=45"
+    },
+    "2_dependency_audit": {
+      "status": "PASSED",
+      "dependencies": {
+        "pymupdf": true,
+        "pytesseract": true,
+        "cv2": true,
+        "spacy": true,
+        "torch": true,
+        "sentence_transformers": true,
+        "cryptography": true,
+        "web3": true
+      },
+      "python_version": "3.14.2 (tags/v3.14.2:df79316, Dec  5 2025, 17:18:21) [MSC v.1944 64 bit (AMD64)]"
+    },
+    "3_security_encryption": {
+      "status": "PASSED",
+      "algorithm": "AES-256 (Fernet)",
+      "key_status": "ENCRYPTED_ROUNDTRIP_VERIFIED"
+    },
+    "4_rsa_keypairs": {
+      "status": "PASSED",
+      "algorithm": "RSA-2048 PSS",
+      "users_provisioned": 5
+    },
+    "5_ai_provider_architecture": {
+      "status": "PASSED",
+      "available_providers": [
+        {
+          "id": "local",
+          "name": "Local Processing",
+          "available": true
+        },
+        {
+          "id": "qwen",
+          "name": "Qwen 3B",
+          "available": false
+        },
+        {
+          "id": "gemini",
+          "name": "Gemini",
+          "available": false
+        }
+      ],
+      "fallback_mechanism": "VERIFIED_NON_BLOCKING_FALLBACK"
+    },
+    "6_synthetic_dataset": {
+      "status": "PASSED",
+      "cases_count": 8,
+      "documents_count": 53
+    },
+    "7_ingestion_pipeline": {
+      "status": "PASSED",
+      "document_id": "89f3da44-be3a-43fd-8360-84e29820f246",
+      "sha256": "1e3128dd9c08451a2de3b8b6e65bfe04955959561f844d9753150c840e8a517c",
+      "latency_ms": 79.1
+    },
+    "8_ocr_intelligence": {
+      "status": "PASSED",
+      "classified_type": "FIR",
+      "extracted_fir": "88/2026",
+      "latency_ms": 3.55
+    },
+    "9_case_association": {
+      "status": "PASSED",
+      "deterministic_match": "CASE-2026-CR-0001",
+      "semantic_method": "SEMANTIC"
+    },
+    "10_sha256_tampering_workflow": {
+      "status": "PASSED",
+      "step_initial": "INTEGRITY_VERIFIED",
+      "step_tampered": "TAMPERING_DETECTED",
+      "step_restored": "INTEGRITY_VERIFIED",
+      "latency_ms": 16.37
+    },
+    "11_audit_hash_chain": {
+      "status": "PASSED",
+      "total_events": 63,
+      "chain_status": "AUDIT_CHAIN_VALID"
+    },
+    "12_blockchain_anchoring": {
+      "status": "PASSED",
+      "tx_hash": null,
+      "blockchain_status": "BLOCKCHAIN_UNAVAILABLE"
+    },
+    "13_digital_signatures": {
+      "status": "PASSED",
+      "valid_verification": "SIGNATURE_VALID",
+      "tampered_verification": "SIGNATURE_INVALID"
+    },
+    "14_versioning_lineage": {
+      "status": "PASSED",
+      "document_id": "89f3da44-be3a-43fd-8360-84e29820f246",
+      "versions_count": 2,
+      "latest_version": 2
+    },
+    "15_search_retrieval": {
+      "status": "PASSED",
+      "keyword_results_count": 8,
+      "semantic_results_count": 10,
+      "latency_ms": 42.31
+    },
+    "16_rbac_enforcement": {
+      "status": "PASSED",
+      "assigned_investigator_results": 1,
+      "unassigned_investigator_results": 0,
+      "rbac_filtering": "ENFORCED"
+    },
+    "17_automated_test_suite": {
+      "status": "PASSED",
+      "test_modules": [
+        "tests.test_documents",
+        "tests.test_ocr",
+        "tests.test_ai",
+        "tests.test_case_association",
+        "tests.test_integrity",
+        "tests.test_signatures",
+        "tests.test_audit",
+        "tests.test_blockchain",
+        "tests.test_rbac",
+        "tests.test_search"
+      ]
+    },
+    "18_performance_metrics": {
+      "status": "PASSED",
+      "metrics": {
+        "ingestion_latency_ms": 79.1,
+        "ocr_intelligence_latency_ms": 3.55,
+        "verification_latency_ms": 16.37,
+        "search_latency_ms": 42.31
+      }
+    }
+  },
+  "summary": {
+    "total": 19,
+    "passed": 18,
+    "failed": 0
+  },
+  "metrics": {
+    "ingestion_latency_ms": 79.1,
+    "ocr_intelligence_latency_ms": 3.55,
+    "verification_latency_ms": 16.37,
+    "search_latency_ms": 42.31
+  }
+}
