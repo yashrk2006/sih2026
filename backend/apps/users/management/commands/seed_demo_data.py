@@ -58,6 +58,9 @@ class Command(BaseCommand):
             },
         ]
 
+        import os
+        demo_password = os.environ.get("DEMO_ADMIN_PASSWORD", "SecurePass123!")
+
         created_users = {}
         for udata in users_data:
             username = udata["username"]
@@ -73,12 +76,21 @@ class Command(BaseCommand):
                     "is_superuser": udata.get("is_superuser", False),
                 },
             )
+            # Update user fields to keep them in sync
+            user.email = udata["email"]
+            user.role = udata["role"]
+            user.first_name = udata["first_name"]
+            user.last_name = udata["last_name"]
+            user.department = udata["department"]
+            user.is_staff = udata.get("is_staff", False)
+            user.is_superuser = udata.get("is_superuser", False)
+            user.set_password(demo_password)
+            user.save()
+            
             if created:
-                user.set_password("SecurePass123!")
-                user.save()
                 self.stdout.write(self.style.SUCCESS(f"  [+] Created user: {username} ({udata['role']})"))
             else:
-                self.stdout.write(self.style.WARNING(f"  [*] User already exists: {username}"))
+                self.stdout.write(self.style.SUCCESS(f"  [*] Updated/Seeded user: {username} ({udata['role']})"))
             created_users[username] = user
 
         # 2. Create Sample Cases
@@ -107,10 +119,14 @@ class Command(BaseCommand):
                 case_id=cdata["case_id"],
                 defaults=cdata,
             )
+            # Always ensure demo officers are assigned to cases for relationship mapping
+            case.assigned_investigators.add(created_users["investigator1"])
+            case.assigned_legal_officers.add(created_users["legal1"])
+            
             if created:
-                case.assigned_investigators.add(created_users["investigator1"])
-                case.assigned_legal_officers.add(created_users["legal1"])
                 self.stdout.write(self.style.SUCCESS(f"  [+] Created Case: {case.case_id}"))
+            else:
+                self.stdout.write(self.style.SUCCESS(f"  [*] Synced Case: {case.case_id}"))
             created_cases[case.case_id] = case
 
         # 3. Create Sample Document

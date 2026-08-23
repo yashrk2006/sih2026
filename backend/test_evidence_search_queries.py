@@ -10,7 +10,7 @@ django.setup()
 from apps.users.models import User
 from apps.search.service import keyword_search
 
-def test_queries():
+def run_test_queries():
     admin = User.objects.get(username="admin")
     
     test_cases = [
@@ -51,4 +51,4 @@ def test_queries():
     print("=" * 70)
 
 if __name__ == "__main__":
-    test_queries()
+    run_test_queries()
