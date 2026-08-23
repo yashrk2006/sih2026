@@ -13,6 +13,7 @@ export const DigitalSignatures: React.FC = () => {
   const [selectedDocId, setSelectedDocId] = useState<string>('');
   const [verifying, setVerifying] = useState(false);
   const [sigResult, setSigResult] = useState<any | null>(null);
+  const [signing, setSigning] = useState(false);
 
   useEffect(() => {
     fetchDocuments();
@@ -41,7 +42,7 @@ export const DigitalSignatures: React.FC = () => {
     const docId = targetDoc ? ((targetDoc as any).document_id || (targetDoc as any).id) : '';
 
     try {
-      const res = await api.get(`/documents/${docId}/verify-signature/`);
+      const res = await api.get(`/documents/${docId}/signature/`);
       const d = res.data;
       
       // The backend returns "verified" (bool) and "status" (string)
@@ -71,6 +72,21 @@ export const DigitalSignatures: React.FC = () => {
       });
     } finally {
       setVerifying(false);
+    }
+  };
+
+  const handleSignDocument = async () => {
+    if (!selectedDocId) return;
+    setSigning(true);
+    try {
+      const res = await api.post(`/documents/${selectedDocId}/sign/`);
+      alert(`Evidence signed successfully by Legal Officer: ${res.data.signed_by}!`);
+      setSigResult(null);
+      await fetchDocuments();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Access Denied: Only Legal Officers or Administrators can sign evidence.');
+    } finally {
+      setSigning(false);
     }
   };
 
@@ -130,6 +146,27 @@ export const DigitalSignatures: React.FC = () => {
                 )}
                 Verify Signature
               </button>
+              
+              {targetDoc && !(targetDoc as any).signature && (
+                <button
+                  className="btn"
+                  onClick={handleSignDocument}
+                  disabled={signing || !selectedDocId}
+                  style={{
+                    background: 'rgba(245,158,11,0.15)',
+                    border: '1px solid rgba(245,158,11,0.4)',
+                    color: '#f59e0b',
+                    display: 'flex', alignItems: 'center', gap: '0.375rem',
+                  }}
+                >
+                  {signing ? (
+                    <div style={{ width: 13, height: 13, border: '2px solid rgba(245,158,11,0.3)', borderTopColor: '#f59e0b', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+                  ) : (
+                    <Key size={14} />
+                  )}
+                  Sign Document
+                </button>
+              )}
             </div>
           )}
         </div>
