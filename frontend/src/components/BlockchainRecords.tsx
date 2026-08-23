@@ -50,26 +50,31 @@ export const BlockchainRecords: React.FC = () => {
     try {
       const res = await api.get(`/documents/${docId}/blockchain-proof/`);
       const anchors = res.data?.blockchain_anchors ?? [];
-      const latestAnchor = anchors[anchors.length - 1];
+      const isAnchored = anchors.length > 0;
+      const latestAnchor = isAnchored ? anchors[anchors.length - 1] : null;
+      
       setVerifyStatus({
-        status: res.data?.current_integrity?.status ?? 'INTEGRITY_VERIFIED',
-        verified: true,
-        block_number: latestAnchor?.block_number ?? `#${blockHeight}`,
-        tx_hash: latestAnchor?.transaction_hash ?? '0x444fe9e97a7d43c85f7b89d2789a2ce2fc111655d200dc78fe9afe3d35b464da',
-        document_hash: (targetDoc as any)?.sha256_hash ?? '',
+        status: isAnchored 
+          ? (latestAnchor?.blockchain_verification?.status || 'BLOCKCHAIN_ANCHORED') 
+          : 'NOT_ANCHORED',
+        verified: isAnchored,
+        block_number: isAnchored ? (latestAnchor?.block_number || `#${blockHeight}`) : '—',
+        tx_hash: isAnchored ? (latestAnchor?.tx_hash || '—') : '—',
+        document_hash: res.data?.current_sha256 || (targetDoc as any)?.sha256_hash || '',
         contract_address: '0x5FbDB2315678afecb367f032d93F642f64180aa3',
         network: 'Local Hardhat EVM (Chain ID: 31337)',
         anchor_count: anchors.length,
       });
-    } catch {
+    } catch (err: any) {
       setVerifyStatus({
-        status: 'INTEGRITY_VERIFIED',
-        verified: true,
-        block_number: `#${blockHeight}`,
-        tx_hash: '0x444fe9e97a7d43c85f7b89d2789a2ce2fc111655d200dc78fe9afe3d35b464da',
-        document_hash: (targetDoc as any)?.sha256_hash ?? '',
+        status: 'VERIFICATION_FAILED',
+        verified: false,
+        block_number: '—',
+        tx_hash: '—',
+        document_hash: (targetDoc as any)?.sha256_hash || '',
         contract_address: '0x5FbDB2315678afecb367f032d93F642f64180aa3',
         network: 'Local Hardhat EVM (Chain ID: 31337)',
+        error: err?.response?.data?.error || 'Failed to verify blockchain anchor. Connection error.',
       });
     } finally {
       setVerifyingOnChain(false);
@@ -204,17 +209,34 @@ export const BlockchainRecords: React.FC = () => {
         <div className="card" style={{ marginBottom: '1rem', borderColor: verifyStatus.verified ? 'rgba(35,134,54,0.4)' : 'rgba(218,54,51,0.4)' }}>
           <div
             style={{
-              padding: '0.875rem 1rem', background: verifyStatus.verified ? 'var(--green-subtle)' : 'var(--red-subtle)',
+              padding: '0.875rem 1rem', 
+              background: verifyStatus.verified ? 'var(--green-subtle)' : 'var(--red-subtle)',
               borderBottom: `1px solid ${verifyStatus.verified ? 'rgba(35,134,54,0.3)' : 'rgba(218,54,51,0.3)'}`,
               display: 'flex', alignItems: 'center', gap: '0.625rem', flexWrap: 'wrap', justifyContent: 'space-between',
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <CheckCircle2 size={18} style={{ color: 'var(--green-text)' }} />
-              <span style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--green-text)' }}>Hash Anchored On-Chain</span>
+              {verifyStatus.verified ? (
+                <CheckCircle2 size={18} style={{ color: 'var(--green-text)' }} />
+              ) : (
+                <span style={{ color: 'var(--red-text)', fontSize: '1.125rem' }}>✕</span>
+              )}
+              <span style={{ fontSize: '0.9375rem', fontWeight: 700, color: verifyStatus.verified ? 'var(--green-text)' : 'var(--red-text)' }}>
+                {verifyStatus.error 
+                  ? 'Verification Error' 
+                  : verifyStatus.verified 
+                  ? 'Hash Anchored On-Chain' 
+                  : 'Document Hash Not Anchored'}
+              </span>
             </div>
             <StatusBadge status={verifyStatus.status} />
           </div>
+
+          {verifyStatus.error && (
+            <div style={{ padding: '1rem', color: 'var(--red-text)', fontSize: '0.8125rem', fontWeight: 600 }}>
+              {verifyStatus.error}
+            </div>
+          )}
 
           <div style={{ padding: '1rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
             <div>

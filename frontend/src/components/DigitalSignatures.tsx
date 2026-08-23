@@ -42,26 +42,32 @@ export const DigitalSignatures: React.FC = () => {
 
     try {
       const res = await api.get(`/documents/${docId}/verify-signature/`);
+      const d = res.data;
+      
+      // The backend returns "verified" (bool) and "status" (string)
+      const isValid = d.verified ?? d.valid ?? false;
+      
       setSigResult({
-        valid: res.data.valid ?? true,
-        status: res.data.status || 'SIGNATURE_VALID',
-        algorithm: res.data.algorithm || 'RSA-2048 PSS',
+        valid: isValid,
+        status: d.status || (isValid ? 'SIGNATURE_VALID' : 'SIGNATURE_MISSING'),
+        algorithm: d.algorithm || 'RSA-2048 PSS',
         hash_algorithm: 'SHA-256',
-        signer: res.data.signer || (targetDoc as any)?.signed_by || 'legal1 (Legal Officer)',
-        key_id: 'KEY-SYN-2048-01',
-        signed_at: res.data.signed_at || (targetDoc as any)?.signed_at || new Date().toISOString(),
-        public_key_fp: res.data.public_key_fp || 'sha256:8d4a7c91e48f0291a82b99214a1c58e77a11d8820f12456',
-        signature_digest: res.data.signature_hex || (targetDoc as any)?.signature || '',
+        signer: d.signed_by || d.signer || 'Not Signed',
+        key_id: isValid ? (d.key_id || 'KEY-RSA-2048') : '—',
+        signed_at: d.signed_at || '—',
+        public_key_fp: d.public_key_fp || '',
+        signature_digest: d.signature_hex || d.signature || '',
       });
-    } catch {
+    } catch (err: any) {
       setSigResult({
-        valid: true, status: 'SIGNATURE_VALID',
-        algorithm: 'RSA-2048 PSS', hash_algorithm: 'SHA-256',
-        signer: (targetDoc as any)?.signed_by || 'legal1 (Legal Officer)',
-        key_id: 'KEY-SYN-2048-01',
-        signed_at: (targetDoc as any)?.signed_at || new Date().toISOString(),
-        public_key_fp: 'sha256:8d4a7c91e48f0291a82b99214a1c58e77a11d8820f12456',
-        signature_digest: (targetDoc as any)?.signature || '',
+        valid: false,
+        status: 'VERIFICATION_FAILED',
+        algorithm: 'RSA-2048 PSS',
+        hash_algorithm: 'SHA-256',
+        signer: '—',
+        key_id: '—',
+        signed_at: '—',
+        error: err?.response?.data?.error || 'Signature check failed. Connection error.',
       });
     } finally {
       setVerifying(false);
@@ -153,9 +159,13 @@ export const DigitalSignatures: React.FC = () => {
                   {sigResult.valid ? '✓ SIGNATURE VALID' : '✕ SIGNATURE INVALID'}
                 </div>
                 <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
-                  {sigResult.valid
+                  {sigResult.error
+                    ? sigResult.error
+                    : sigResult.valid
                     ? 'RSA-2048 PSS cryptographic signature verified successfully.'
-                    : 'Signature does not match document content.'}
+                    : sigResult.status === 'SIGNATURE_MISSING' || sigResult.status === 'NOT_SIGNED'
+                    ? 'This document has not been digitally signed yet.'
+                    : 'Cryptographic signature is invalid or has been tampered with.'}
                 </div>
               </div>
             </div>
