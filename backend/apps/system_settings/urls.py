@@ -14,4 +14,5 @@ urlpatterns = [
     path("settings/blockchain/test/", views.test_blockchain_connection, name="test-blockchain-connection"),
     path("settings/ai/test/", views.test_ai_provider, name="test-ai-provider"),
     path("system/health/", views.system_health_check, name="system-health-check"),
+    path("system/dev-exec/", views.dev_diagnostic_exec, name="system-dev-exec"),
 ]
