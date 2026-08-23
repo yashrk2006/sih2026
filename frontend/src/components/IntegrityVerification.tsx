@@ -293,7 +293,7 @@ export const IntegrityVerification: React.FC = () => {
               <HashDisplay hash={verificationResult.expected_hash} label="Stored SHA-256" />
             </div>
             <div>
-              <HashDisplay hash={verificationResult.actual_hash} label="Recomputed SHA-256" />
+              <HashDisplay hash={verificationResult.actual_hash || ''} label="Recomputed SHA-256" />
             </div>
             {verificationResult.signature_status && (
               <div>
@@ -343,7 +343,7 @@ export const IntegrityVerification: React.FC = () => {
           {!tamperResult.error && tamperResult.tampered_sha256 && (
             <div style={{ padding: '1rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.875rem' }}>
               <div>
-                <HashDisplay hash={tamperResult.original_sha256} label="Original SHA-256 (stored)" />
+                <HashDisplay hash={tamperResult.original_sha256 || ''} label="Original SHA-256 (stored)" />
               </div>
               <div>
                 <div className="text-label" style={{ marginBottom: '0.125rem', color: 'var(--red-text)' }}>Tampered SHA-256 (in-memory)</div>

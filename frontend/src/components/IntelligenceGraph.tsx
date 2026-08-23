@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  Network, ZoomIn, ZoomOut, RefreshCw, Search, Filter,
+  ZoomIn, ZoomOut, RefreshCw, Search, Filter,
   FolderOpen, FileText, User, Database, Eye, X,
 } from 'lucide-react';
 import { api, ensureArray } from '../services/api';
@@ -79,7 +79,7 @@ function buildGraph(cases: any[], documents: any[]): { nodes: GraphNode[]; links
     });
 
     // Officers — up to 2 per case
-    const officers: string[] = [];
+    const officers: any[] = [];
     if (c.assigned_investigators?.length) {
       officers.push(...c.assigned_investigators.slice(0, 1).map((u: any) => u.username || u));
     }

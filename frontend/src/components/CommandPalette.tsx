@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Search, LayoutDashboard, FolderOpen, FileText, ShieldCheck,
-  Link2, Upload, KeyRound, Database, BarChart3, Settings,
+  Upload, KeyRound, Database, BarChart3, Settings,
   FileOutput, Network, Clock, ArrowRight, X,
 } from 'lucide-react';
 import { api, ensureArray } from '../services/api';
