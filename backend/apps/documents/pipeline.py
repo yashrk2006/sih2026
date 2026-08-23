@@ -106,109 +106,118 @@ def ingest_document(
     sha256 = compute_sha256(file_bytes)
     logger.info("Document SHA-256: %s (file=%s)", sha256[:16] + "...", original_filename)
 
-    # ── Step 3: Create Document record ───────────────────────────────────────
-    document = Document.objects.create(
-        filename=original_filename,
-        original_filename=original_filename,
-        mime_type=mime_type,
-        file_size=len(file_bytes),
-        sha256_hash=sha256,
-        uploaded_by=uploaded_by,
-        status=DocumentStatus.PROCESSING,
-        storage_location="pending",
-        current_version=1,
-    )
-
-    # ── Step 4: Encrypt and store ─────────────────────────────────────────────
+    # ── Step 3-11: Database & Storage Operations (Atomic Transaction) ─────────
+    from django.db import transaction
     try:
-        rel_path, stored_sha256 = store_document_encrypted(
-            file_bytes,
-            str(document.document_id),
-            1,
-            original_filename,
-        )
-        document.storage_location = rel_path
-        document.is_encrypted = True
+        with transaction.atomic():
+            # Create Document record
+            document = Document.objects.create(
+                filename=original_filename,
+                original_filename=original_filename,
+                mime_type=mime_type,
+                file_size=len(file_bytes),
+                sha256_hash=sha256,
+                uploaded_by=uploaded_by,
+                status=DocumentStatus.PROCESSING,
+                storage_location="pending",
+                current_version=1,
+            )
+
+            # Encrypt and store
+            rel_path, stored_sha256 = store_document_encrypted(
+                file_bytes,
+                str(document.document_id),
+                1,
+                original_filename,
+            )
+            document.storage_location = rel_path
+            document.is_encrypted = True
+
+            # Create first DocumentVersion
+            version = DocumentVersion.objects.create(
+                document=document,
+                version_number=1,
+                sha256_hash=sha256,
+                storage_location=rel_path,
+                file_size=len(file_bytes),
+                uploaded_by=uploaded_by,
+                change_description=change_description,
+                previous_version=None,
+            )
+
+            # Extract text
+            logger.info("Extracting text from %s (%s)", original_filename, mime_type)
+            extraction_result = extract_text(file_bytes, mime_type)
+            extracted_text = extraction_result["text"]
+            extraction_method = extraction_result["method"]
+
+            # AI intelligence: classify + extract entities
+            logger.info("Running document intelligence...")
+            ai_result = analyze_document(extracted_text)
+
+            document_type = ai_result.get("document_type", "UNKNOWN")
+            if document_type not in [c[0] for c in DocumentType.choices]:
+                document_type = "UNKNOWN"
+            document.document_type = document_type
+
+            # Create DocumentMetadata
+            metadata = DocumentMetadata.objects.create(
+                document=document,
+                version=version,
+                raw_text=extracted_text[:50000],
+                extraction_method=extraction_method,
+                extraction_confidence=extraction_result.get("confidence"),
+                extracted_case_id=ai_result.get("case_id") or "",
+                extracted_fir_number=ai_result.get("fir_number") or "",
+                extracted_date=ai_result.get("date") or "",
+                extracted_location=ai_result.get("location") or "",
+                extracted_police_station=ai_result.get("police_station") or "",
+                extracted_court_name=ai_result.get("court_name") or "",
+                extracted_persons=ai_result.get("persons", []),
+                extracted_organizations=ai_result.get("organizations", []),
+                extracted_legal_sections=ai_result.get("legal_sections", []),
+                extracted_evidence_ids=ai_result.get("evidence_ids", []),
+                classified_type=document_type,
+                classification_method=ai_result.get("classification_method", "rule_based"),
+                classification_confidence=ai_result.get("classification_confidence"),
+                ai_output=ai_result,
+            )
+
+            # Compute embedding for semantic search (non-critical)
+            try:
+                from apps.search.embeddings import compute_embedding
+                embedding = compute_embedding(extracted_text[:2048])
+                if embedding:
+                    metadata.embedding = embedding
+                    metadata.save(update_fields=["embedding"])
+            except Exception as e:
+                logger.warning("Embedding computation failed (non-critical): %s", e)
+
+            # Case association
+            if manual_case:
+                document.case = manual_case
+                document.case_association_method = "MANUAL"
+                document.case_association_confidence = 1.0
+                document.case_association_reason = "Manually specified at upload"
+                association_result = {"associated": True, "method": "MANUAL", "case_id": manual_case.case_id}
+            else:
+                association_result = associate_document_with_case(document, extracted_text, ai_result)
+
+            # Finalize document record
+            document.status = DocumentStatus.ACTIVE
+            document.save()
     except Exception as e:
-        logger.error("Failed to store document: %s", e)
-        document.status = DocumentStatus.ERROR
-        document.save()
-        return {"success": False, "error": f"Storage failed: {e}"}
-
-    # ── Step 5: Create first DocumentVersion ─────────────────────────────────
-    version = DocumentVersion.objects.create(
-        document=document,
-        version_number=1,
-        sha256_hash=sha256,
-        storage_location=rel_path,
-        file_size=len(file_bytes),
-        uploaded_by=uploaded_by,
-        change_description=change_description,
-        previous_version=None,
-    )
-
-    # ── Step 6: Extract text ──────────────────────────────────────────────────
-    logger.info("Extracting text from %s (%s)", original_filename, mime_type)
-    extraction_result = extract_text(file_bytes, mime_type)
-    extracted_text = extraction_result["text"]
-    extraction_method = extraction_result["method"]
-
-    # ── Step 7: AI intelligence: classify + extract entities ──────────────────
-    logger.info("Running document intelligence...")
-    ai_result = analyze_document(extracted_text)
-
-    document_type = ai_result.get("document_type", "UNKNOWN")
-    # Map string to DocumentType choices
-    if document_type not in [c[0] for c in DocumentType.choices]:
-        document_type = "UNKNOWN"
-    document.document_type = document_type
-
-    # ── Step 8: Create DocumentMetadata ──────────────────────────────────────
-    metadata = DocumentMetadata.objects.create(
-        document=document,
-        version=version,
-        raw_text=extracted_text[:50000],  # Store up to 50k chars
-        extraction_method=extraction_method,
-        extraction_confidence=extraction_result.get("confidence"),
-        extracted_case_id=ai_result.get("case_id") or "",
-        extracted_fir_number=ai_result.get("fir_number") or "",
-        extracted_date=ai_result.get("date") or "",
-        extracted_location=ai_result.get("location") or "",
-        extracted_police_station=ai_result.get("police_station") or "",
-        extracted_court_name=ai_result.get("court_name") or "",
-        extracted_persons=ai_result.get("persons", []),
-        extracted_organizations=ai_result.get("organizations", []),
-        extracted_legal_sections=ai_result.get("legal_sections", []),
-        extracted_evidence_ids=ai_result.get("evidence_ids", []),
-        classified_type=document_type,
-        classification_method=ai_result.get("classification_method", "rule_based"),
-        classification_confidence=ai_result.get("classification_confidence"),
-        ai_output=ai_result,
-    )
-
-    # ── Step 9: Compute embedding for semantic search ─────────────────────────
-    try:
-        from apps.search.embeddings import compute_embedding
-        embedding = compute_embedding(extracted_text[:2048])
-        if embedding:
-            metadata.embedding = embedding
-            metadata.save(update_fields=["embedding"])
-    except Exception as e:
-        logger.warning("Embedding computation failed (non-critical): %s", e)
-
-    # ── Step 10: Case association ─────────────────────────────────────────────
-    if manual_case:
-        document.case = manual_case
-        document.case_association_method = "MANUAL"
-        document.case_association_confidence = 1.0
-        document.case_association_reason = "Manually specified at upload"
-        association_result = {"associated": True, "method": "MANUAL", "case_id": manual_case.case_id}
-    else:
-        association_result = associate_document_with_case(document, extracted_text, ai_result)
-
-    # ── Step 11: Finalize document record ─────────────────────────────────────
-    document.status = DocumentStatus.ACTIVE
-    document.save()
+        logger.error("Failed to ingest document: %s", e)
+        try:
+            from apps.security.services import get_document_storage_root, get_encrypted_path
+            if 'document' in locals() and document.document_id:
+                rel = get_encrypted_path(str(document.document_id), 1, original_filename)
+                p = get_document_storage_root() / rel
+                if p.exists():
+                    p.unlink()
+        except Exception as cleanup_err:
+            logger.warning("Failed to clean up uploaded file after transaction failure: %s", cleanup_err)
+        return {"success": False, "error": f"Ingestion failed: {e}"}
 
     # ── Step 12: Audit event ──────────────────────────────────────────────────
     log_audit_event(
@@ -238,7 +247,7 @@ def ingest_document(
                 version=version,
                 document_hash=sha256,
                 tx_hash=tx,
-                block_number=None,  # Set async if needed
+                block_number=None,
                 anchored_by=uploaded_by,
             )
     except Exception as e:

@@ -153,8 +153,13 @@ export const IntegrityVerification: React.FC = () => {
       <div className="stat-grid" style={{ marginBottom: '1.25rem' }}>
         {[
           { label: 'Documents', value: safeDocs.length.toString(), sub: 'Available for check', color: 'var(--text-primary)' },
-          { label: 'Integrity Rate', value: '100%', sub: 'Zero mismatches', color: 'var(--green-text)' },
-          { label: 'Failures', value: tamperResult ? '1' : '0', sub: 'Tamper alerts', color: tamperResult ? 'var(--red-text)' : 'var(--text-primary)' },
+          {
+            label: 'Integrity Rate',
+            value: history.length === 0 ? '—' : `${Math.round((history.filter(h => h.result === 'PASS').length / history.length) * 100)}%`,
+            sub: history.length === 0 ? 'Run a check' : 'Verified this session',
+            color: history.some(h => h.result === 'FAIL') ? 'var(--red-text)' : 'var(--green-text)',
+          },
+          { label: 'Failures', value: history.filter(h => h.result === 'FAIL').length.toString(), sub: 'Tamper alerts', color: history.some(h => h.result === 'FAIL') ? 'var(--red-text)' : 'var(--text-primary)' },
           { label: 'Last Verified', value: history.length > 0 ? history[0].timestamp : '—', sub: 'SHA-256 recomputed', color: 'var(--text-primary)' },
         ].map((s) => (
           <div key={s.label} className="card" style={{ padding: '0.875rem' }}>
@@ -252,63 +257,94 @@ export const IntegrityVerification: React.FC = () => {
         </div>
       </div>
 
-      {/* VERIFIED result */}
+      {/* VERIFIED / FAILED result */}
       {verificationResult && (
-        <div
-          className="card"
-          style={{
-            marginBottom: '1rem',
-            borderColor: verificationResult.verified ? 'rgba(35,134,54,0.4)' : 'rgba(218,54,51,0.4)',
-          }}
-        >
-          <div
-            style={{
-              padding: '1rem',
-              background: verificationResult.verified ? 'var(--green-subtle)' : 'var(--red-subtle)',
-              borderBottom: `1px solid ${verificationResult.verified ? 'rgba(35,134,54,0.3)' : 'rgba(218,54,51,0.3)'}`,
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-              {verificationResult.verified
-                ? <CheckCircle2 size={20} style={{ color: 'var(--green-text)' }} />
-                : <XCircle size={20} style={{ color: 'var(--red-text)' }} />
-              }
-              <div>
-                <div style={{ fontSize: '1rem', fontWeight: 700, color: verificationResult.verified ? 'var(--green-text)' : 'var(--red-text)' }}>
-                  {verificationResult.verified ? '✓ INTEGRITY VERIFIED' : '⚠ INTEGRITY FAILED'}
-                </div>
-                <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
-                  {verificationResult.verified
-                    ? 'SHA-256 fingerprint matches stored hash exactly. No modifications detected.'
-                    : 'Hash mismatch detected. Document may have been tampered with.'}
+        <>
+          {/* Storage-missing alert — NOT a tamper event */}
+          {(verificationResult.status as string) === 'FILE_NOT_FOUND' && (
+            <div
+              className="card"
+              style={{ marginBottom: '1rem', borderColor: 'rgba(200,140,0,0.4)', background: 'rgba(200,140,0,0.06)' }}
+            >
+              <div style={{ padding: '1rem', display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+                <AlertTriangle size={20} style={{ color: 'orange', flexShrink: 0, marginTop: 2 }} />
+                <div>
+                  <div style={{ fontWeight: 700, color: 'orange', marginBottom: '0.25rem' }}>⚠ EVIDENCE FILE NOT FOUND IN BACKEND STORAGE</div>
+                  <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                    <strong>This is a storage infrastructure issue — NOT a cryptographic tamper event.</strong><br />
+                    The original SHA-256 hash is permanently preserved in the database. The encrypted evidence
+                    file may have been lost from the backend's ephemeral filesystem after a server restart or
+                    redeploy. Contact the system administrator to restore the evidence file from the
+                    database-backed FileStore or a backup.
+                  </div>
+                  <div style={{ marginTop: '0.625rem' }}>
+                    <div className="text-label" style={{ marginBottom: '0.25rem' }}>Preserved Original SHA-256</div>
+                    <HashDisplay hash={verificationResult.expected_hash} label="" />
+                  </div>
                 </div>
               </div>
             </div>
-            <StatusBadge status={verificationResult.status} />
-          </div>
+          )}
 
-          <div style={{ padding: '1rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.875rem' }}>
-            <div>
-              <HashDisplay hash={verificationResult.expected_hash} label="Stored SHA-256" />
-            </div>
-            <div>
-              <HashDisplay hash={verificationResult.actual_hash || ''} label="Recomputed SHA-256" />
-            </div>
-            {verificationResult.signature_status && (
-              <div>
-                <div className="text-label" style={{ marginBottom: '0.25rem' }}>Signature</div>
-                <StatusBadge status={verificationResult.signature_status} />
+          {/* Normal VERIFIED / FAILED card */}
+          {(verificationResult.status as string) !== 'FILE_NOT_FOUND' && (
+            <div
+              className="card"
+              style={{
+                marginBottom: '1rem',
+                borderColor: verificationResult.verified ? 'rgba(35,134,54,0.4)' : 'rgba(218,54,51,0.4)',
+              }}
+            >
+              <div
+                style={{
+                  padding: '1rem',
+                  background: verificationResult.verified ? 'var(--green-subtle)' : 'var(--red-subtle)',
+                  borderBottom: `1px solid ${verificationResult.verified ? 'rgba(35,134,54,0.3)' : 'rgba(218,54,51,0.3)'}`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+                  {verificationResult.verified
+                    ? <CheckCircle2 size={20} style={{ color: 'var(--green-text)' }} />
+                    : <XCircle size={20} style={{ color: 'var(--red-text)' }} />
+                  }
+                  <div>
+                    <div style={{ fontSize: '1rem', fontWeight: 700, color: verificationResult.verified ? 'var(--green-text)' : 'var(--red-text)' }}>
+                      {verificationResult.verified ? '✓ INTEGRITY VERIFIED' : '⚠ INTEGRITY FAILED'}
+                    </div>
+                    <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
+                      {verificationResult.verified
+                        ? 'SHA-256 fingerprint matches stored hash exactly. No modifications detected.'
+                        : 'Hash mismatch detected. Document may have been tampered with.'}
+                    </div>
+                  </div>
+                </div>
+                <StatusBadge status={verificationResult.status} />
               </div>
-            )}
-            {verificationResult.blockchain_status && (
-              <div>
-                <div className="text-label" style={{ marginBottom: '0.25rem' }}>Blockchain</div>
-                <StatusBadge status={verificationResult.blockchain_status} />
+
+              <div style={{ padding: '1rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.875rem' }}>
+                <div>
+                  <HashDisplay hash={verificationResult.expected_hash} label="Stored SHA-256 (original)" />
+                </div>
+                <div>
+                  <HashDisplay hash={(verificationResult as any).current_sha256 || verificationResult.actual_hash || ''} label="Recomputed SHA-256 (current)" />
+                </div>
+                {verificationResult.signature_status && (
+                  <div>
+                    <div className="text-label" style={{ marginBottom: '0.25rem' }}>Signature</div>
+                    <StatusBadge status={verificationResult.signature_status} />
+                  </div>
+                )}
+                {verificationResult.blockchain_status && (
+                  <div>
+                    <div className="text-label" style={{ marginBottom: '0.25rem' }}>Blockchain</div>
+                    <StatusBadge status={verificationResult.blockchain_status} />
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* TAMPERED result */}

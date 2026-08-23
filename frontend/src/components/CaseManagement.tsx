@@ -21,6 +21,8 @@ export const CaseManagement: React.FC<CaseManagementProps> = ({ currentUserRole 
   const [statusFilter, setStatusFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [caseDocSearch, setCaseDocSearch] = useState('');
+  const [expandedTypes, setExpandedTypes] = useState<Record<string, boolean>>({});
 
   // Sharing states
   const [shareOpen, setShareOpen] = useState(false);
@@ -96,6 +98,32 @@ export const CaseManagement: React.FC<CaseManagementProps> = ({ currentUserRole 
     const matchS = !statusFilter || c.status === statusFilter;
     return matchQ && matchS;
   });
+
+  // Group case docs by document_type for dossier tree
+  const filteredCaseDocs = caseDocs.filter(d => {
+    const q = caseDocSearch.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      (d.filename || d.original_filename || '').toLowerCase().includes(q) ||
+      (d.document_type || '').toLowerCase().includes(q) ||
+      (d.sha256_hash || '').toLowerCase().includes(q)
+    );
+  });
+  const docsByType: Record<string, DocumentItem[]> = {};
+  filteredCaseDocs.forEach(d => {
+    const t = d.document_type || 'UNKNOWN';
+    if (!docsByType[t]) docsByType[t] = [];
+    docsByType[t].push(d);
+  });
+  const toggleType = (t: string) =>
+    setExpandedTypes(prev => ({ ...prev, [t]: !prev[t] }));
+  const docTypeLabel: Record<string, string> = {
+    FIR: 'FIR', POLICE_REPORT: 'Police Report', INVESTIGATION_RECORD: 'Investigation Record',
+    INVESTIGATION_REPORT: 'Investigation Report', WITNESS_STATEMENT: 'Witness Statement',
+    CHARGE_SHEET: 'Charge Sheet', EVIDENCE_RECORD: 'Evidence Record',
+    COURT_FILING: 'Court Filing', FORENSIC_REPORT: 'Forensic Report',
+    LEGAL_NOTICE: 'Legal Notice', JUDGMENT: 'Judgment', OTHER: 'Other', UNKNOWN: 'Unknown',
+  };
 
   return (
     <div>
@@ -331,38 +359,75 @@ export const CaseManagement: React.FC<CaseManagementProps> = ({ currentUserRole 
                       </span>
                     </div>
 
-                    {caseDocs.length === 0 ? (
+                    {/* Inner Case Document Search */}
+                    <div style={{ marginBottom: '0.625rem' }}>
+                      <input
+                        type="text"
+                        className="input"
+                        placeholder="Search documents in this case…"
+                        value={caseDocSearch}
+                        onChange={e => setCaseDocSearch(e.target.value)}
+                        style={{ fontSize: '0.8125rem', padding: '0.375rem 0.625rem' }}
+                      />
+                    </div>
+
+                    {filteredCaseDocs.length === 0 ? (
                       <EmptyState
                         icon={<FileText size={24} />}
-                        title="No associated documents"
-                        description="No evidence documents are attached to this case."
+                        title={caseDocSearch ? 'No matching documents' : 'No associated documents'}
+                        description={caseDocSearch ? 'Try a different search term.' : 'No evidence documents are attached to this case.'}
                       />
                     ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                        {caseDocs.map((doc) => (
-                          <div
-                            key={doc.document_id || doc.id}
-                            className="card-raised"
-                            style={{
-                              padding: '0.625rem 0.75rem',
-                              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                              gap: '0.5rem',
-                            }}
-                          >
-                            <div style={{ minWidth: 0, flex: 1 }}>
-                              <div className="truncate-text" style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--text-primary)' }}>
-                                {doc.filename || doc.original_filename}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+                        {Object.entries(docsByType).map(([type, docs]) => (
+                          <div key={type}>
+                            {/* Dossier category header */}
+                            <button
+                              onClick={() => toggleType(type)}
+                              style={{
+                                width: '100%', display: 'flex', alignItems: 'center',
+                                justifyContent: 'space-between', padding: '0.375rem 0.5rem',
+                                background: 'var(--surface-raised)', border: '1px solid var(--border-subtle)',
+                                borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+                                marginBottom: '0.25rem',
+                              }}
+                            >
+                              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent-hover)', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+                                <FileText size={11} />
+                                {docTypeLabel[type] || type}
+                              </span>
+                              <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                <span className="badge badge-blue" style={{ fontSize: '0.625rem', padding: '0.1rem 0.35rem' }}>{docs.length}</span>
+                                <span>{expandedTypes[type] === false ? '▶' : '▼'}</span>
+                              </span>
+                            </button>
+
+                            {/* Documents in this category */}
+                            {expandedTypes[type] !== false && (
+                              <div style={{ paddingLeft: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.25rem', marginBottom: '0.25rem' }}>
+                                {docs.map(doc => (
+                                  <div
+                                    key={doc.document_id || doc.id}
+                                    className="card-raised"
+                                    style={{
+                                      padding: '0.5rem 0.625rem',
+                                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                      gap: '0.5rem',
+                                    }}
+                                  >
+                                    <div style={{ minWidth: 0, flex: 1 }}>
+                                      <div className="truncate-text" style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--text-primary)' }}>
+                                        {doc.filename || doc.original_filename}
+                                      </div>
+                                      {doc.sha256_hash && (
+                                        <HashDisplay hash={doc.sha256_hash} />
+                                      )}
+                                    </div>
+                                    <StatusBadge status="verified" size="sm" />
+                                  </div>
+                                ))}
                               </div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.125rem', flexWrap: 'wrap' }}>
-                                <span className="text-mono" style={{ fontSize: '0.6875rem', color: 'var(--accent-hover)' }}>
-                                  {doc.document_type || 'FIR'}
-                                </span>
-                                {doc.sha256_hash && (
-                                  <HashDisplay hash={doc.sha256_hash} />
-                                )}
-                              </div>
-                            </div>
-                            <StatusBadge status="verified" size="sm" />
+                            )}
                           </div>
                         ))}
                       </div>

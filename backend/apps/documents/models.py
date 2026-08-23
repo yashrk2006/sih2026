@@ -12,16 +12,18 @@ from django.utils import timezone
 
 
 class DocumentType(models.TextChoices):
-    FIR = "FIR", "First Information Report"
+    FIR = "FIR", "FIR"
     POLICE_REPORT = "POLICE_REPORT", "Police Report"
+    INVESTIGATION_RECORD = "INVESTIGATION_RECORD", "Investigation Record"
+    INVESTIGATION_REPORT = "INVESTIGATION_REPORT", "Investigation Report"  # legacy compatibility
     WITNESS_STATEMENT = "WITNESS_STATEMENT", "Witness Statement"
-    INVESTIGATION_REPORT = "INVESTIGATION_REPORT", "Investigation Report"
     CHARGE_SHEET = "CHARGE_SHEET", "Charge Sheet"
     EVIDENCE_RECORD = "EVIDENCE_RECORD", "Evidence Record"
     COURT_FILING = "COURT_FILING", "Court Filing"
     FORENSIC_REPORT = "FORENSIC_REPORT", "Forensic Report"
     LEGAL_NOTICE = "LEGAL_NOTICE", "Legal Notice"
     JUDGMENT = "JUDGMENT", "Judgment"
+    OTHER = "OTHER", "Other"
     UNKNOWN = "UNKNOWN", "Unknown"
 
 
@@ -45,7 +47,7 @@ class Document(models.Model):
     filename = models.CharField(max_length=500)
     original_filename = models.CharField(max_length=500)
     document_type = models.CharField(
-        max_length=30, choices=DocumentType.choices, default=DocumentType.UNKNOWN
+        max_length=30, choices=DocumentType.choices, db_index=True, default=DocumentType.UNKNOWN
     )
     mime_type = models.CharField(max_length=100)
     file_size = models.BigIntegerField(help_text="Original file size in bytes")
@@ -55,7 +57,7 @@ class Document(models.Model):
     is_encrypted = models.BooleanField(default=True)
 
     # Integrity — SHA-256 of the ORIGINAL (pre-encryption) bytes
-    sha256_hash = models.CharField(max_length=64, help_text="SHA-256 hex digest of original file bytes")
+    sha256_hash = models.CharField(max_length=64, db_index=True, help_text="SHA-256 hex digest of original file bytes")
 
     # Versioning
     current_version = models.IntegerField(default=1)
@@ -64,7 +66,7 @@ class Document(models.Model):
     uploaded_by = models.ForeignKey(
         "users.User", on_delete=models.SET_NULL, null=True, related_name="uploaded_documents"
     )
-    status = models.CharField(max_length=20, choices=DocumentStatus.choices, default=DocumentStatus.PROCESSING)
+    status = models.CharField(max_length=20, choices=DocumentStatus.choices, db_index=True, default=DocumentStatus.PROCESSING)
 
     # Case association metadata
     case_association_method = models.CharField(
@@ -85,12 +87,12 @@ class Document(models.Model):
 
     # Compliance & Retention Policy
     retention_category = models.CharField(max_length=100, default="STANDARD")
-    retention_start_date = models.DateField(default=timezone.now)
+    retention_start_date = models.DateField(default=timezone.localdate)
     retention_end_date = models.DateField(null=True, blank=True)
     legal_hold_status = models.BooleanField(default=False, help_text="True if document is locked due to active court hold")
 
     # Timestamps
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -116,7 +118,7 @@ class DocumentVersion(models.Model):
     """
     document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name="versions")
     version_number = models.IntegerField()
-    sha256_hash = models.CharField(max_length=64, help_text="SHA-256 of the original file bytes for this version")
+    sha256_hash = models.CharField(max_length=64, db_index=True, help_text="SHA-256 of the original file bytes for this version")
     storage_location = models.CharField(max_length=1000)
     file_size = models.BigIntegerField()
 
@@ -124,7 +126,7 @@ class DocumentVersion(models.Model):
         "users.User", on_delete=models.SET_NULL, null=True, related_name="document_versions"
     )
     change_description = models.TextField(blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     # Version chain — link to previous version for auditability
     previous_version = models.ForeignKey(
@@ -161,7 +163,7 @@ class DocumentMetadata(models.Model):
 
     # Structured extracted fields
     extracted_case_id = models.CharField(max_length=200, blank=True)
-    extracted_fir_number = models.CharField(max_length=200, blank=True)
+    extracted_fir_number = models.CharField(max_length=200, blank=True, db_index=True)
     extracted_date = models.CharField(max_length=100, blank=True)
     extracted_location = models.CharField(max_length=500, blank=True)
     extracted_police_station = models.CharField(max_length=500, blank=True)
@@ -185,7 +187,7 @@ class DocumentMetadata(models.Model):
     # In production, use pgvector or FAISS index
     embedding = models.JSONField(null=True, blank=True)
 
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -193,3 +195,19 @@ class DocumentMetadata(models.Model):
 
     def __str__(self):
         return f"Metadata for {self.document.original_filename}"
+
+
+class DocumentFileStore(models.Model):
+    """
+    Database fallback storage for encrypted document bytes.
+    Ensures persistent storage across ephemeral container restarts.
+    """
+    storage_location = models.CharField(max_length=1000, unique=True)
+    encrypted_data = models.BinaryField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "documents_filestore"
+
+    def __str__(self):
+        return f"FileStore backup for {self.storage_location}"

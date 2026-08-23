@@ -59,7 +59,22 @@ def upload_document(request):
     if not result["success"]:
         return Response({"error": result["error"]}, status=status.HTTP_400_BAD_REQUEST)
 
-    return Response(result, status=status.HTTP_201_CREATED)
+    doc_instance = result.pop("document")
+    doc_data = DocumentSerializer(doc_instance).data
+
+    response_data = {
+        "success": True,
+        "document_id": str(doc_instance.document_id),
+        "status": doc_instance.status,
+        "filename": doc_instance.filename,
+        "sha256": doc_instance.sha256_hash,
+        "document_type": doc_instance.document_type,
+        "case_id": doc_instance.case.case_id if doc_instance.case else "",
+        "message": "Evidence uploaded successfully",
+        **doc_data
+    }
+
+    return Response(response_data, status=status.HTTP_201_CREATED)
 
 
 @api_view(["GET", "PUT"])
@@ -190,10 +205,16 @@ def verify_integrity(request, document_id):
     GET /api/documents/{id}/verify-integrity
     Verify the document's SHA-256 integrity.
 
-    Decrypts the stored file and recomputes SHA-256.
-    Compares against the stored hash.
+    Decrypts the stored file (from disk or DB fallback) and recomputes SHA-256.
+    Compares against the stored original hash.
 
-    Returns INTEGRITY_VERIFIED or TAMPERING_DETECTED.
+    Returns:
+      {
+        "verified": bool,
+        "stored_sha256": str,    # original hash at ingestion time
+        "current_sha256": str,   # freshly recomputed hash from stored bytes
+        "status": "INTEGRITY_VERIFIED" | "TAMPERING_DETECTED" | "FILE_NOT_FOUND"
+      }
     """
     try:
         doc = Document.objects.get(document_id=document_id)
@@ -205,28 +226,52 @@ def verify_integrity(request, document_id):
 
     result = verify_stored_document(doc.storage_location, doc.sha256_hash)
 
-    # Fetch blockchain status from the real in-memory chain
+    # FILE_NOT_FOUND means the file was lost from ephemeral storage AND
+    # is not in the DB fallback — this is a storage infrastructure problem,
+    # NOT a tamper event.  The frontend must explain this clearly.
+    storage_missing = result["status"] == "FILE_NOT_FOUND"
+    audit_action = "INTEGRITY_FAILED" if storage_missing else "DOCUMENT_INTEGRITY_CHECK"
+
+    # Blockchain status (in-memory chain; UNAVAILABLE if node unreachable)
     from apps.blockchain.service import verify_hash_on_chain
-    blockchain_result = verify_hash_on_chain(doc.sha256_hash)
+    try:
+        blockchain_result = verify_hash_on_chain(doc.sha256_hash)
+    except Exception:
+        blockchain_result = {"status": "UNAVAILABLE", "anchored": False, "tx_hash": None}
 
     log_audit_event(
         actor=request.user,
-        action="DOCUMENT_INTEGRITY_CHECK",
+        action=audit_action,
         document=doc,
         case=doc.case,
         result=result["status"],
-        details=f"expected={doc.sha256_hash[:16]}... actual={str(result.get('actual_hash', ''))[:16]}...",
+        details=(
+            f"expected={doc.sha256_hash[:16]}... "
+            f"actual={str(result.get('actual_hash', ''))[:16]}..."
+        ),
     )
 
+    current_sha256 = result.get("actual_hash")
     return Response({
         "document_id": str(doc.document_id),
         "filename": doc.original_filename,
         "current_version": doc.current_version,
-        "stored_sha256": doc.sha256_hash,
-        "expected_hash": doc.sha256_hash,
-        "actual_hash": result.get("actual_hash"),
+        # Primary fields required by the requirements
         "verified": result["verified"],
+        "stored_sha256": doc.sha256_hash,
+        "current_sha256": current_sha256,
         "status": result["status"],
+        # Legacy field aliases (keep for backward compat)
+        "expected_hash": doc.sha256_hash,
+        "actual_hash": current_sha256,
+        # Storage problem flag — NOT a tamper event
+        "storage_missing": storage_missing,
+        "error": (
+            "Evidence file was not found in backend storage. "
+            "This is a STORAGE INFRASTRUCTURE problem, not a cryptographic tamper event. "
+            "The original hash is preserved in the database."
+        ) if storage_missing else None,
+        # Blockchain
         "blockchain_status": blockchain_result["status"],
         "blockchain_tx": blockchain_result.get("tx_hash"),
         "blockchain_anchored": blockchain_result["anchored"],
@@ -460,8 +505,10 @@ def document_list(request):
     """
     GET /api/documents/
     List all documents accessible to the current user.
+    Supports filtering by: case, document_type, date, officer, status, legal_hold, retention_status
     """
     from apps.users.permissions import user_can_access_document
+    from django.db.models import Q
 
     if request.user.role in ("ADMIN", "AUDITOR"):
         documents = Document.objects.select_related("uploaded_by", "case").all()
@@ -475,6 +522,36 @@ def document_list(request):
         ).select_related("uploaded_by", "case")
     else:
         documents = Document.objects.filter(status="ACTIVE").select_related("uploaded_by", "case")
+
+    # Apply filters from query params
+    case_id = request.GET.get("case") or request.GET.get("case_id")
+    if case_id:
+        documents = documents.filter(Q(case__case_id=case_id) | Q(case__id=case_id))
+
+    doc_type = request.GET.get("document_type") or request.GET.get("doc_type")
+    if doc_type:
+        documents = documents.filter(document_type=doc_type)
+
+    date_str = request.GET.get("date")
+    if date_str:
+        documents = documents.filter(created_at__date=date_str)
+
+    officer_val = request.GET.get("officer")
+    if officer_val:
+        documents = documents.filter(Q(uploaded_by__username=officer_val) | Q(uploaded_by__id=officer_val))
+
+    status_val = request.GET.get("status")
+    if status_val:
+        documents = documents.filter(status=status_val)
+
+    legal_hold = request.GET.get("legal_hold")
+    if legal_hold is not None:
+        is_hold = str(legal_hold).lower() in ("true", "1", "yes")
+        documents = documents.filter(legal_hold_status=is_hold)
+
+    retention_status = request.GET.get("retention_status")
+    if retention_status:
+        documents = documents.filter(retention_category=retention_status)
 
     serializer = DocumentListSerializer(documents, many=True)
     return Response(serializer.data)

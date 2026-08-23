@@ -20,12 +20,13 @@ class DocumentMetadataSerializer(serializers.ModelSerializer):
 
 class DocumentVersionSerializer(serializers.ModelSerializer):
     uploaded_by_name = serializers.CharField(source="uploaded_by.username", read_only=True)
+    uploaded_by_username = serializers.CharField(source="uploaded_by.username", read_only=True)
 
     class Meta:
         model = DocumentVersion
         fields = [
             "id", "version_number", "sha256_hash", "file_size",
-            "uploaded_by", "uploaded_by_name", "change_description",
+            "uploaded_by", "uploaded_by_name", "uploaded_by_username", "change_description",
             "created_at", "blockchain_anchored", "blockchain_tx_hash",
         ]
         read_only_fields = fields

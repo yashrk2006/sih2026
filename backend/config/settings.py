@@ -76,12 +76,19 @@ TEMPLATES = [
 ]
 
 # ── Database ──────────────────────────────────────────────────────────────────
-# SQLite for development; easily swappable to PostgreSQL
-DATABASE_URL = os.environ.get("DATABASE_URL", "")
+# SQLite for development; PostgreSQL required for production (DEBUG=False)
+from django.core.exceptions import ImproperlyConfigured
+
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 if DATABASE_URL and (DATABASE_URL.startswith("postgres://") or DATABASE_URL.startswith("postgresql://")):
     import dj_database_url  # type: ignore
     DATABASES = {"default": dj_database_url.parse(DATABASE_URL)}
 else:
+    if not DEBUG:
+        raise ImproperlyConfigured(
+            "Production mode (DEBUG=False) requires a valid PostgreSQL DATABASE_URL. "
+            "SQLite database is not permitted in production."
+        )
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",

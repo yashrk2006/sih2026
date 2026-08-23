@@ -25,6 +25,8 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({ currentUserRol
   const [activeTab, setActiveTab] = useState<'details' | 'crypto' | 'versions'>('details');
   const [loading, setLoading] = useState(true);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [versionsData, setVersionsData] = useState<any[]>([]);
+  const [versionsLoading, setVersionsLoading] = useState(false);
 
   useEffect(() => {
     fetchDocuments();
@@ -43,6 +45,27 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({ currentUserRol
       console.warn("Failed to fetch document registry:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchVersions = async (docId: string) => {
+    setVersionsLoading(true);
+    try {
+      const res = await api.get(`/documents/${docId}/versions/`);
+      setVersionsData(Array.isArray(res.data) ? res.data : (res.data?.results ?? []));
+    } catch (err) {
+      console.warn('Failed to fetch document versions:', err);
+      setVersionsData([]);
+    } finally {
+      setVersionsLoading(false);
+    }
+  };
+
+  const handleTabChange = (tab: 'details' | 'crypto' | 'versions') => {
+    setActiveTab(tab);
+    if (tab === 'versions' && selectedDoc) {
+      const docId = (selectedDoc as any).document_id || (selectedDoc as any).id;
+      fetchVersions(docId);
     }
   };
 
@@ -271,7 +294,7 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({ currentUserRol
                   {(['details', 'crypto', 'versions'] as const).map((tab) => (
                     <button
                       key={tab}
-                      onClick={() => setActiveTab(tab)}
+                      onClick={() => handleTabChange(tab)}
                       style={{
                         flex: 1,
                         padding: '0.5rem',
@@ -412,16 +435,36 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({ currentUserRol
 
                   {activeTab === 'versions' && (
                     <div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
-                        Version history linked to canonical hash chain.
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+                        Immutable version chain — each entry is cryptographically linked.
                       </div>
-                      <div className="card-raised" style={{ padding: '0.625rem 0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div>
-                          <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)' }}>v1.0 (Current)</div>
-                          <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>Initial upload & cryptographic anchor</div>
+                      {versionsLoading ? (
+                        <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-muted)', fontSize: '0.8125rem' }}>Loading versions…</div>
+                      ) : versionsData.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-muted)', fontSize: '0.8125rem' }}>No version history available.</div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                          {versionsData.map((v: any, idx: number) => (
+                            <div key={v.id ?? idx} className="card-raised" style={{ padding: '0.625rem 0.75rem' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                                <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                                  v{v.version_number}{idx === 0 ? ' (Current)' : ''}
+                                </span>
+                                <StatusBadge status={idx === 0 ? 'active' : 'archived'} label={`v${v.version_number}`} />
+                              </div>
+                              <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginBottom: '0.2rem' }}>
+                                {v.change_description || 'No description'}
+                              </div>
+                              <div style={{ fontSize: '0.6875rem', fontFamily: 'monospace', color: 'var(--text-secondary)', wordBreak: 'break-all' }}>
+                                SHA-256: {v.sha256_hash ? v.sha256_hash.slice(0, 32) + '…' : '—'}
+                              </div>
+                              <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+                                Uploaded by <strong>{v.uploaded_by_username || 'unknown'}</strong> · {v.created_at ? new Date(v.created_at).toLocaleString() : '—'}
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                        <StatusBadge status="active" label="v1.0" />
-                      </div>
+                      )}
                     </div>
                   )}
                 </div>

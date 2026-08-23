@@ -11,22 +11,21 @@ from django.db.models import Q
 logger = logging.getLogger(__name__)
 
 
-def keyword_search(query: str, user, case_id: str = None, doc_type: str = None) -> list:
+def keyword_search(
+    query: str,
+    user,
+    case_id: str = None,
+    doc_type: str = None,
+    officer: str = None,
+    status: str = None,
+    legal_section: str = None,
+    date_from: str = None,
+    date_to: str = None,
+) -> list:
     """
     Keyword and metadata search across accessible documents.
     
-    Searches across:
-    - Document ID & Filename
-    - SHA-256 Hash Digest
-    - Case ID & Case Title
-    - Extracted FIR Number
-    - Extracted Evidence IDs (e.g. EVID-SYN-0487-001)
-    - Extracted Persons (e.g. Vikram Malhotra, Priya Nair)
-    - Extracted Organizations (e.g. Aranya Fintech)
-    - Extracted Legal Sections (e.g. 318, 66C)
-    - Extracted Location & Police Station
-    - Extracted / Raw OCR Text
-    
+    Supports query string search plus explicit filters.
     Enforces RBAC on every query.
     """
     from apps.documents.models import Document
@@ -47,6 +46,21 @@ def keyword_search(query: str, user, case_id: str = None, doc_type: str = None) 
 
     if doc_type:
         qs = qs.filter(document_type=doc_type)
+
+    if officer:
+        qs = qs.filter(Q(uploaded_by__username=officer) | Q(uploaded_by__id=officer))
+
+    if status:
+        qs = qs.filter(status=status)
+
+    if legal_section:
+        qs = qs.filter(metadata__extracted_legal_sections__icontains=legal_section)
+
+    if date_from:
+        qs = qs.filter(created_at__date__gte=date_from)
+
+    if date_to:
+        qs = qs.filter(created_at__date__lte=date_to)
 
     if query:
         q_clean = query.strip()
@@ -119,8 +133,8 @@ def keyword_search(query: str, user, case_id: str = None, doc_type: str = None) 
     return deduped_results
 
 
-def semantic_search(query: str, user, top_k: int = 10) -> list:
+def semantic_search(query: str, user, top_k: int = 10, **kwargs) -> list:
     """
     Semantic search fallback using sentence-transformer embeddings or keyword fallback.
     """
-    return keyword_search(query, user)
+    return keyword_search(query, user, **kwargs)

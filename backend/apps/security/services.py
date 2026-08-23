@@ -175,9 +175,7 @@ def store_document_encrypted(
     Encrypt file_bytes and store in the document storage location.
     
     Returns:
-        (storage_relative_path, sha256_of_original_bytes)
-    
-    SHA-256 is computed from the ORIGINAL (plaintext) bytes before encryption.
+       (storage_relative_path, sha256_of_original_bytes)
     """
     sha256 = compute_sha256(file_bytes)
     rel_path = get_encrypted_path(document_id, version, original_filename)
@@ -191,6 +189,17 @@ def store_document_encrypted(
         "Stored encrypted document: doc_id=%s version=%d size=%d sha256=%s...",
         document_id, version, len(file_bytes), sha256[:16],
     )
+
+    # Sync to DB backup store
+    try:
+        from apps.documents.models import DocumentFileStore
+        DocumentFileStore.objects.update_or_create(
+            storage_location=rel_path,
+            defaults={"encrypted_data": ciphertext}
+        )
+    except Exception as e:
+        logger.error("Failed to backup document to Database FileStore: %s", e)
+
     return rel_path, sha256
 
 
@@ -200,6 +209,19 @@ def retrieve_document_bytes(storage_relative_path: str) -> bytes:
     Returns original plaintext bytes.
     """
     abs_path = get_document_storage_root() / storage_relative_path
+    
+    # Restore from DB if missing on ephemeral storage
+    if not abs_path.exists():
+        try:
+            from apps.documents.models import DocumentFileStore
+            store_record = DocumentFileStore.objects.filter(storage_location=storage_relative_path).first()
+            if store_record:
+                abs_path.parent.mkdir(parents=True, exist_ok=True)
+                abs_path.write_bytes(store_record.encrypted_data)
+                logger.info("Restored document file from DB FileStore cache: %s", storage_relative_path)
+        except Exception as e:
+            logger.error("Failed to restore document file from DB: %s", e)
+
     return decrypt_file_to_bytes(str(abs_path))
 
 
@@ -209,6 +231,18 @@ def verify_stored_document(storage_relative_path: str, expected_sha256: str) -> 
     Decrypts the stored file, recomputes SHA-256, compares to expected.
     """
     abs_path = get_document_storage_root() / storage_relative_path
+
+    # Restore from DB if missing on ephemeral storage
+    if not abs_path.exists():
+        try:
+            from apps.documents.models import DocumentFileStore
+            store_record = DocumentFileStore.objects.filter(storage_location=storage_relative_path).first()
+            if store_record:
+                abs_path.parent.mkdir(parents=True, exist_ok=True)
+                abs_path.write_bytes(store_record.encrypted_data)
+                logger.info("Restored document file from DB FileStore cache for verification: %s", storage_relative_path)
+        except Exception as e:
+            logger.error("Failed to restore document file from DB for verification: %s", e)
 
     if not abs_path.exists():
         return {

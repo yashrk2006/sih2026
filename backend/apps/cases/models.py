@@ -26,14 +26,14 @@ class Case(models.Model):
 
     # Unique identifiers
     case_id = models.CharField(max_length=100, unique=True, help_text="Official case ID e.g. CASE-2026-001")
-    fir_number = models.CharField(max_length=100, blank=True, help_text="FIR number if applicable")
+    fir_number = models.CharField(max_length=100, blank=True, db_index=True, help_text="FIR number if applicable")
     reference_number = models.CharField(max_length=100, blank=True)
 
     # Descriptive
     title = models.CharField(max_length=500)
     description = models.TextField(blank=True)
     case_type = models.CharField(max_length=20, choices=CASE_TYPE_CHOICES, default="INVESTIGATION")
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="ACTIVE")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, db_index=True, default="ACTIVE")
 
     # Location & jurisdiction
     location = models.CharField(max_length=300, blank=True)
@@ -54,7 +54,7 @@ class Case(models.Model):
 
     # Dates
     incident_date = models.DateField(null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
     closed_at = models.DateTimeField(null=True, blank=True)
 
