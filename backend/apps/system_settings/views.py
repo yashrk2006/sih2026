@@ -385,11 +385,23 @@ def system_health_check(request):
     # 5. AI Providers Status
     ai_status = get_ai_providers_status()
 
+    # 6. DocumentFileStore check
+    filestore_ok = False
+    try:
+        from apps.documents.models import DocumentFileStore
+        DocumentFileStore.objects.count()
+        filestore_ok = True
+    except Exception:
+        filestore_ok = False
+
     return Response({
         "timestamp": timezone.now().isoformat(),
         "environment": "development" if settings.DEBUG else "production",
         "app_version": "1.0.0-SIH26190",
         "backend_version": "Django 5.1.5 (Python 3.14)",
+        "database_engine": settings.DATABASES["default"]["ENGINE"].split(".")[-1],
+        "database_connected": db_ok,
+        "filestore_available": filestore_ok,
         "subsystems": {
             "database": {
                 "status": "OPERATIONAL" if db_ok else "ERROR",

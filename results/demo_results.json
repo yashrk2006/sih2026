@@ -1,9 +1,9 @@
 {
-  "timestamp": "2026-08-23 15:17:45",
+  "timestamp": "2026-08-23 21:08:02",
   "checkpoints": {
     "1_base_setup": {
       "status": "PASSED",
-      "details": "Database connected. Users=6, Cases=11, Docs=52"
+      "details": "Database connected. Users=7, Cases=11, Docs=80"
     },
     "2_dependency_audit": {
       "status": "PASSED",
@@ -46,7 +46,7 @@
           "installed": true,
           "available": false,
           "status_code": "INSTALLED_RESOURCE_LIMITED",
-          "status_message": "Installed (qwen2.5:3b) but resource limited (insufficient memory / OOM)"
+          "status_message": "Installed (qwen2.5:3b) but model startup timed out or memory limited"
         },
         {
           "id": "gemini",
@@ -58,24 +58,24 @@
         }
       ],
       "fallback_mechanism": "VERIFIED_NON_BLOCKING_FALLBACK",
-      "details": "AI architecture verification complete. CLEAN_RESOURCE_GUARD_VAL_ERROR: Cannot select Qwen 3B: Installed (qwen2.5:3b) but resource limited (insufficient memory / OOM). Active provider remains Local Processing."
+      "details": "AI architecture verification complete. CLEAN_RESOURCE_GUARD_VAL_ERROR: Cannot select Qwen 3B: Installed (qwen2.5:3b) but model startup timed out or memory limited. Active provider remains Local Processing."
     },
     "6_synthetic_dataset": {
       "status": "PASSED",
       "cases_count": 11,
-      "documents_count": 60
+      "documents_count": 88
     },
     "7_ingestion_pipeline": {
       "status": "PASSED",
-      "document_id": "87aceb42-ec80-4759-8a8c-0d9d11a81252",
+      "document_id": "8bb9b561-30ec-472f-ad8c-8eed875c842f",
       "sha256": "1e3128dd9c08451a2de3b8b6e65bfe04955959561f844d9753150c840e8a517c",
-      "latency_ms": 101.85
+      "latency_ms": 130.66
     },
     "8_ocr_intelligence": {
       "status": "PASSED",
       "classified_type": "FIR",
       "extracted_fir": "88/2026",
-      "latency_ms": 1.37
+      "latency_ms": 4.36
     },
     "9_case_association": {
       "status": "PASSED",
@@ -87,11 +87,11 @@
       "step_initial": "INTEGRITY_VERIFIED",
       "step_tampered": "TAMPERING_DETECTED",
       "step_restored": "INTEGRITY_VERIFIED",
-      "latency_ms": 6.29
+      "latency_ms": 44.71
     },
     "11_audit_hash_chain": {
       "status": "PASSED",
-      "total_events": 102,
+      "total_events": 147,
       "chain_status": "AUDIT_CHAIN_VALID"
     },
     "12_blockchain_anchoring": {
@@ -106,15 +106,15 @@
     },
     "14_versioning_lineage": {
       "status": "PASSED",
-      "document_id": "87aceb42-ec80-4759-8a8c-0d9d11a81252",
+      "document_id": "8bb9b561-30ec-472f-ad8c-8eed875c842f",
       "versions_count": 2,
       "latest_version": 2
     },
     "15_search_retrieval": {
       "status": "PASSED",
-      "keyword_results_count": 6,
+      "keyword_results_count": 9,
       "semantic_results_count": 0,
-      "latency_ms": 15.38
+      "latency_ms": 40.58
     },
     "16_rbac_enforcement": {
       "status": "PASSED",
@@ -140,10 +140,10 @@
     "18_performance_metrics": {
       "status": "PASSED",
       "metrics": {
-        "ingestion_latency_ms": 101.85,
-        "ocr_intelligence_latency_ms": 1.37,
-        "verification_latency_ms": 6.29,
-        "search_latency_ms": 15.38
+        "ingestion_latency_ms": 130.66,
+        "ocr_intelligence_latency_ms": 4.36,
+        "verification_latency_ms": 44.71,
+        "search_latency_ms": 40.58
       }
     },
     "19_police_assets_lifecycle": {
@@ -164,9 +164,9 @@
     "failed": 0
   },
   "metrics": {
-    "ingestion_latency_ms": 101.85,
-    "ocr_intelligence_latency_ms": 1.37,
-    "verification_latency_ms": 6.29,
-    "search_latency_ms": 15.38
+    "ingestion_latency_ms": 130.66,
+    "ocr_intelligence_latency_ms": 4.36,
+    "verification_latency_ms": 44.71,
+    "search_latency_ms": 40.58
   }
 }

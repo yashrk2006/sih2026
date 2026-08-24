@@ -183,7 +183,9 @@ def store_document_encrypted(
 
     abs_path.parent.mkdir(parents=True, exist_ok=True)
     ciphertext = encrypt_bytes(file_bytes)
+    logger.info("FILE_ENCRYPTED: size=%d", len(ciphertext))
     abs_path.write_bytes(ciphertext)
+    logger.info("FILE_WRITTEN: path=%s", abs_path)
 
     logger.info(
         "Stored encrypted document: doc_id=%s version=%d size=%d sha256=%s...",
@@ -197,8 +199,10 @@ def store_document_encrypted(
             storage_location=rel_path,
             defaults={"encrypted_data": ciphertext}
         )
+        logger.info("FILESTORE_CREATED: storage_location=%s", rel_path)
     except Exception as e:
         logger.error("Failed to backup document to Database FileStore: %s", e)
+        raise e
 
     return rel_path, sha256
 

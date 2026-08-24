@@ -224,3 +224,42 @@ class FIROnPersistenceTest(TestCase):
         )
         with self.assertRaises(PermissionError):
             doc.delete()
+
+    def test_real_upload_persists_document(self):
+        self.client.force_authenticate(user=self.investigator)
+        file_content = b"Regression test for real evidence upload persistence."
+        uploaded_file = SimpleUploadedFile("REAL_TEST_FIR_2026.pdf", file_content, content_type="application/pdf")
+        
+        response = self.client.post(
+            "/api/documents/upload/",
+            {
+                "file": uploaded_file,
+                "case_id": self.case.case_id,
+                "change_description": "Ingest verification regression pass"
+            },
+            format="multipart"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        
+        doc_id = response.data["document_id"]
+        self.assertTrue(Document.objects.filter(document_id=doc_id).exists())
+        
+        doc = Document.objects.get(document_id=doc_id)
+        self.assertTrue(DocumentVersion.objects.filter(document=doc).exists())
+        self.assertTrue(DocumentFileStore.objects.filter(storage_location=doc.storage_location).exists())
+        
+        # Verify encrypted data exists
+        store_entry = DocumentFileStore.objects.get(storage_location=doc.storage_location)
+        self.assertIsNotNone(store_entry.encrypted_data)
+        
+        # Verify case relationship exists
+        self.assertEqual(doc.case, self.case)
+        
+        # Verify audit event exists
+        self.assertTrue(AuditEvent.objects.filter(document=doc, action="DOCUMENT_UPLOADED").exists())
+        
+        # Verify download retrieval returns the original decrypted content
+        response_dl = self.client.get(f"/api/documents/{doc.document_id}/download/")
+        self.assertEqual(response_dl.status_code, status.HTTP_200_OK)
+        self.assertEqual(response_dl.getvalue(), file_content)
+

@@ -24,9 +24,12 @@ from apps.audit.utils import log_audit_event
 @permission_classes([CanUploadDocument])
 def upload_document(request):
     """
-    POST /api/documents/upload
+    POST /api/documents/upload/
     Upload a new document through the ingestion pipeline.
     """
+    import logging
+    logger = logging.getLogger(__name__)
+
     serializer = DocumentUploadSerializer(data=request.data)
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -42,24 +45,39 @@ def upload_document(request):
         try:
             manual_case = Case.objects.get(case_id=case_id)
         except Case.DoesNotExist:
-            return Response(
-                {"error": f"Case '{case_id}' not found"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            try:
+                manual_case = Case.objects.get(id=case_id)
+            except (Case.DoesNotExist, ValueError):
+                return Response(
+                    {"error": f"Case '{case_id}' not found"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
     file_bytes = file_obj.read()
-    result = ingest_document(
-        file_bytes=file_bytes,
-        original_filename=file_obj.name,
-        uploaded_by=request.user,
-        change_description=change_description,
-        manual_case=manual_case,
-    )
 
-    if not result["success"]:
-        return Response({"error": result["error"]}, status=status.HTTP_400_BAD_REQUEST)
+    from django.db import transaction
+    try:
+        with transaction.atomic():
+            result = ingest_document(
+                file_bytes=file_bytes,
+                original_filename=file_obj.name,
+                uploaded_by=request.user,
+                change_description=change_description,
+                manual_case=manual_case,
+            )
+            if not result["success"]:
+                raise ValueError(result["error"])
 
-    doc_instance = result.pop("document")
+            doc_instance = result["document"]
+            doc_instance.status = "ACTIVE"
+            doc_instance.save(update_fields=["status"])
+
+        logger.info("DATABASE_COMMIT: Evidence ingestion transaction successfully committed")
+    except Exception as e:
+        logger.error("DATABASE_ROLLBACK: Evidence ingestion transaction rolled back. Error: %s", e, exc_info=True)
+        return Response({"error": f"Transaction failed: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    doc_instance.refresh_from_db()
     doc_data = DocumentSerializer(doc_instance).data
 
     response_data = {
@@ -68,12 +86,18 @@ def upload_document(request):
         "status": doc_instance.status,
         "filename": doc_instance.filename,
         "sha256": doc_instance.sha256_hash,
+        "stored_sha256": doc_instance.sha256_hash,
         "document_type": doc_instance.document_type,
         "case_id": doc_instance.case.case_id if doc_instance.case else "",
+        "created_at": doc_instance.created_at.isoformat() if doc_instance.created_at else "",
         "message": "Evidence uploaded successfully",
         **doc_data
     }
 
+    if "document" in response_data:
+        response_data.pop("document")
+
+    logger.info("UPLOAD_COMPLETED: doc_id=%s", doc_instance.document_id)
     return Response(response_data, status=status.HTTP_201_CREATED)
 
 
@@ -1154,6 +1178,9 @@ Description/Details:
         file_bytes = txt.encode("utf-8")
         filename = f"FIR_{fir_number}.txt"
 
+    import logging
+    logger = logging.getLogger(__name__)
+
     try:
         with transaction.atomic():
             case.fir_number = fir_number
@@ -1169,11 +1196,12 @@ Description/Details:
                 manual_case=case,
             )
             if not result["success"]:
-                return Response({"error": result["error"]}, status=status.HTTP_400_BAD_REQUEST)
+                raise ValueError(result["error"])
 
             doc_instance = result["document"]
             doc_instance.document_type = DocumentType.FIR
-            doc_instance.save(update_fields=["document_type"])
+            doc_instance.status = "ACTIVE"
+            doc_instance.save(update_fields=["document_type", "status"])
 
             metadata = doc_instance.metadata
             metadata.extracted_fir_number = fir_number
@@ -1185,7 +1213,10 @@ Description/Details:
             metadata.extracted_legal_sections = sections_list
             metadata.raw_text = f"FIR Details:\n{description}\n\n{metadata.raw_text}"
             metadata.save()
+
+        logger.info("DATABASE_COMMIT: FIR ingestion transaction successfully committed")
     except Exception as e:
+        logger.error("DATABASE_ROLLBACK: FIR ingestion transaction rolled back. Error: %s", e, exc_info=True)
         return Response({"error": f"Failed to create FIR: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     log_audit_event(
@@ -1197,6 +1228,7 @@ Description/Details:
         details=f"FIR {fir_number} created and ingested",
     )
 
+    doc_instance.refresh_from_db()
     doc_data = DocumentSerializer(doc_instance).data
     response_data = {
         "success": True,
@@ -1204,11 +1236,18 @@ Description/Details:
         "status": doc_instance.status,
         "filename": doc_instance.filename,
         "sha256": doc_instance.sha256_hash,
+        "stored_sha256": doc_instance.sha256_hash,
         "document_type": doc_instance.document_type,
         "case_id": case.case_id,
+        "created_at": doc_instance.created_at.isoformat() if doc_instance.created_at else "",
         "message": "FIR created and stored securely",
         **doc_data
     }
+
+    if "document" in response_data:
+        response_data.pop("document")
+
+    logger.info("UPLOAD_COMPLETED: doc_id=%s", doc_instance.document_id)
     return Response(response_data, status=status.HTTP_201_CREATED)
 
 

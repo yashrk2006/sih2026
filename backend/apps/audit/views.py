@@ -16,7 +16,17 @@ def audit_list(request):
     GET /api/audit/
     List all audit events (ADMIN and AUDITOR only).
     """
-    events = AuditEvent.objects.select_related("actor", "document", "case").all()[:500]
+    events = AuditEvent.objects.select_related("actor", "document", "case").all()
+    
+    document_id = request.query_params.get("document_id")
+    if document_id:
+        events = events.filter(document__document_id=document_id)
+        
+    case_id = request.query_params.get("case_id")
+    if case_id:
+        events = events.filter(case__case_id=case_id)
+        
+    events = events[:500]
     serializer = AuditEventSerializer(events, many=True)
     return Response(serializer.data)
 

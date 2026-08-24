@@ -101,6 +101,8 @@ def ingest_document(
     if not valid:
         return {"success": False, "error": error}
 
+    logger.info("UPLOAD_STARTED: filename=%s size=%d", original_filename, len(file_bytes))
+
     # ── Step 2: Compute SHA-256 of original bytes ─────────────────────────────
     # IMPORTANT: SHA-256 computed from ORIGINAL (pre-encryption) bytes
     sha256 = compute_sha256(file_bytes)
@@ -122,6 +124,7 @@ def ingest_document(
                 storage_location="pending",
                 current_version=1,
             )
+            logger.info("DOCUMENT_CREATED: doc_id=%s", document.document_id)
 
             # Encrypt and store
             rel_path, stored_sha256 = store_document_encrypted(
@@ -144,6 +147,7 @@ def ingest_document(
                 change_description=change_description,
                 previous_version=None,
             )
+            logger.info("DOCUMENT_VERSION_CREATED: version_number=1")
 
             # Extract text
             logger.info("Extracting text from %s (%s)", original_filename, mime_type)
