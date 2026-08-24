@@ -1105,4 +1105,160 @@ def compliance_overview(request):
     })
 
 
+@api_view(["POST"])
+@parser_classes([MultiPartParser, FormParser])
+@permission_classes([CanUploadDocument])
+def create_fir(request):
+    """
+    POST /api/documents/fir/
+    Create a new FIR metadata record and ingest its document.
+    """
+    from apps.cases.models import Case
+    from apps.documents.models import DocumentType
+    from django.db import transaction
+
+    fir_number = request.data.get("fir_number")
+    case_id = request.data.get("case_id")
+    police_station = request.data.get("police_station")
+    date_val = request.data.get("date")
+    officer = request.data.get("officer")
+    applicable_sections = request.data.get("applicable_sections", "")
+    description = request.data.get("description", "")
+    file_obj = request.FILES.get("file")
+
+    if not all([fir_number, case_id, police_station, date_val, officer, description]):
+        return Response({"error": "Missing required fields"}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        case = Case.objects.get(case_id=case_id)
+    except Case.DoesNotExist:
+        try:
+            case = Case.objects.get(id=case_id)
+        except (Case.DoesNotExist, ValueError):
+            return Response({"error": f"Case '{case_id}' not found"}, status=status.HTTP_400_BAD_REQUEST)
+
+    if file_obj:
+        file_bytes = file_obj.read()
+        filename = file_obj.name
+    else:
+        txt = f"""FIRST INFORMATION REPORT (F.I.R.)
+FIR Number: {fir_number}
+Police Station: {police_station}
+Date: {date_val}
+Investigating Officer: {officer}
+Applicable Sections: {applicable_sections}
+
+Description/Details:
+{description}
+"""
+        file_bytes = txt.encode("utf-8")
+        filename = f"FIR_{fir_number}.txt"
+
+    try:
+        with transaction.atomic():
+            case.fir_number = fir_number
+            case.police_station = police_station
+            case.description = f"{case.description}\n\n[FIR {fir_number}]: {description}".strip()
+            case.save(update_fields=["fir_number", "police_station", "description"])
+
+            result = ingest_document(
+                file_bytes=file_bytes,
+                original_filename=filename,
+                uploaded_by=request.user,
+                change_description=f"FIR {fir_number} creation",
+                manual_case=case,
+            )
+            if not result["success"]:
+                return Response({"error": result["error"]}, status=status.HTTP_400_BAD_REQUEST)
+
+            doc_instance = result["document"]
+            doc_instance.document_type = DocumentType.FIR
+            doc_instance.save(update_fields=["document_type"])
+
+            metadata = doc_instance.metadata
+            metadata.extracted_fir_number = fir_number
+            metadata.extracted_police_station = police_station
+            metadata.extracted_date = date_val
+            if officer not in metadata.extracted_persons:
+                metadata.extracted_persons.append(officer)
+            sections_list = [s.strip() for s in applicable_sections.split(",") if s.strip()]
+            metadata.extracted_legal_sections = sections_list
+            metadata.raw_text = f"FIR Details:\n{description}\n\n{metadata.raw_text}"
+            metadata.save()
+    except Exception as e:
+        return Response({"error": f"Failed to create FIR: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    log_audit_event(
+        actor=request.user,
+        action="DOCUMENT_UPLOADED",
+        document=doc_instance,
+        case=case,
+        result="SUCCESS",
+        details=f"FIR {fir_number} created and ingested",
+    )
+
+    doc_data = DocumentSerializer(doc_instance).data
+    response_data = {
+        "success": True,
+        "document_id": str(doc_instance.document_id),
+        "status": doc_instance.status,
+        "filename": doc_instance.filename,
+        "sha256": doc_instance.sha256_hash,
+        "document_type": doc_instance.document_type,
+        "case_id": case.case_id,
+        "message": "FIR created and stored securely",
+        **doc_data
+    }
+    return Response(response_data, status=status.HTTP_201_CREATED)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def download_document(request, document_id):
+    """
+    GET /api/documents/{id}/download/
+    Retrieve, decrypt and return the raw document file bytes.
+    """
+    from django.http import HttpResponse
+    try:
+        doc = Document.objects.get(document_id=document_id)
+    except Document.DoesNotExist:
+        try:
+            doc = Document.objects.get(id=document_id)
+        except (Document.DoesNotExist, ValueError):
+            return Response({"error": "Document not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    if not user_can_access_document(request.user, doc, permission_type="READ"):
+        log_audit_event(
+            actor=request.user,
+            action="DOCUMENT_ACCESS_DENIED",
+            document=doc,
+            case=doc.case,
+            result="DENIED",
+            details="User attempted to download document without access",
+        )
+        return Response({"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN)
+
+    try:
+        from apps.security.services import retrieve_document_bytes
+        file_bytes = retrieve_document_bytes(doc.storage_location)
+    except Exception as e:
+        return Response(
+            {"error": f"Failed to retrieve/decrypt document: {e}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+    log_audit_event(
+        actor=request.user,
+        action="DOCUMENT_DOWNLOADED",
+        document=doc,
+        case=doc.case,
+        result="SUCCESS",
+    )
+
+    response = HttpResponse(file_bytes, content_type=doc.mime_type)
+    response["Content-Disposition"] = f'attachment; filename="{doc.original_filename}"'
+    return response
+
+
 

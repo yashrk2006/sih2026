@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Briefcase, FileText, Search, RefreshCw, AlertCircle, Eye, ShieldCheck } from 'lucide-react';
+import { Briefcase, FileText, Search, RefreshCw, AlertCircle, Eye, ShieldCheck, Download, Plus, CheckCircle } from 'lucide-react';
 import { api, ensureArray } from '../services/api';
 import type { CaseItem, DocumentItem } from '../services/api';
 import type { UserRoleName } from '../services/rbac';
@@ -29,6 +29,26 @@ export const CaseManagement: React.FC<CaseManagementProps> = ({ currentUserRole 
   const [shareUser, setShareUser] = useState('');
   const [sharing, setSharing] = useState(false);
 
+  // New Ingestion / FIR Modals state
+  const [createFirOpen, setCreateFirOpen] = useState(false);
+  const [uploadEvidenceOpen, setUploadEvidenceOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [uploadFeedback, setUploadFeedback] = useState<any | null>(null);
+
+  // FIR Form State
+  const [firNumber, setFirNumber] = useState('');
+  const [policeStation, setPoliceStation] = useState('');
+  const [firDate, setFirDate] = useState('');
+  const [firOfficer, setFirOfficer] = useState('');
+  const [applicableSections, setApplicableSections] = useState('');
+  const [firDescription, setFirDescription] = useState('');
+  const [firFile, setFirFile] = useState<File | null>(null);
+
+  // Evidence Form State
+  const [evidenceType, setEvidenceType] = useState('OTHER');
+  const [evidenceDescription, setEvidenceDescription] = useState('');
+  const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
+
   const handleShareCase = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCase) return;
@@ -46,6 +66,124 @@ export const CaseManagement: React.FC<CaseManagementProps> = ({ currentUserRole 
       alert(err?.response?.data?.error || 'Failed to share case.');
     } finally {
       setSharing(false);
+    }
+  };
+
+  const handleDownload = async (docId: string, filename: string) => {
+    try {
+      const response = await api.get(`/documents/${docId}/download/`, {
+        responseType: 'blob'
+      });
+      const contentType = response.headers['content-type'];
+      const mimeType = typeof contentType === 'string' ? contentType : undefined;
+      const blob = new Blob([response.data], { type: mimeType });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Error downloading file:", err);
+      alert("Failed to download decrypted file. You may not have access permission.");
+    }
+  };
+
+  const handleCreateFir = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedCase) return;
+    setSubmitting(true);
+    try {
+      const formData = new FormData();
+      formData.append('fir_number', firNumber);
+      formData.append('case_id', selectedCase.case_id);
+      formData.append('police_station', policeStation);
+      formData.append('date', firDate);
+      formData.append('officer', firOfficer);
+      formData.append('applicable_sections', applicableSections);
+      formData.append('description', firDescription);
+      if (firFile) {
+        formData.append('file', firFile);
+      }
+
+      const res = await api.post('/documents/fir/', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      
+      setUploadFeedback({
+        filename: res.data.filename,
+        document_id: res.data.document_id,
+        case_id: res.data.case_id,
+        document_type: res.data.document_type,
+        created_at: res.data.created_at,
+        sha256: res.data.sha256,
+        status: res.data.status,
+        message: 'FIR Ingestion Completed Successfully'
+      });
+
+      // Reset form
+      setFirNumber('');
+      setPoliceStation('');
+      setFirDate('');
+      setFirOfficer('');
+      setApplicableSections('');
+      setFirDescription('');
+      setFirFile(null);
+      setCreateFirOpen(false);
+      
+      // Refresh documents
+      handleSelectCase(selectedCase);
+      fetchCases();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to create FIR');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleUploadEvidence = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedCase || !evidenceFile) return;
+    setSubmitting(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', evidenceFile);
+      formData.append('case_id', selectedCase.case_id);
+      formData.append('document_type', evidenceType);
+      formData.append('change_description', evidenceDescription);
+
+      const res = await api.post('/documents/upload/', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+
+      setUploadFeedback({
+        filename: res.data.filename,
+        document_id: res.data.document_id,
+        case_id: res.data.case_id,
+        document_type: res.data.document_type,
+        created_at: res.data.created_at,
+        sha256: res.data.sha256,
+        status: res.data.status,
+        message: 'Evidence File Uploaded & Encrypted'
+      });
+
+      // Reset form
+      setEvidenceDescription('');
+      setEvidenceFile(null);
+      setUploadEvidenceOpen(false);
+
+      // Refresh documents
+      handleSelectCase(selectedCase);
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to upload evidence');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -311,13 +449,33 @@ export const CaseManagement: React.FC<CaseManagementProps> = ({ currentUserRole 
                     </span>
                     <StatusBadge status={selectedCase.status || 'ACTIVE'} size="sm" />
                   </div>
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
-                    onClick={() => setShareOpen(true)}
-                  >
-                    Share Dossier
-                  </button>
+                  <div style={{ display: 'flex', gap: '0.375rem' }}>
+                    {(currentUserRole === 'ADMIN' || currentUserRole === 'INVESTIGATOR') && (
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        style={{ padding: '0.25rem 0.5rem', fontSize: '0.725rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                        onClick={() => setCreateFirOpen(true)}
+                      >
+                        <Plus size={11} /> Create FIR
+                      </button>
+                    )}
+                    {(currentUserRole === 'ADMIN' || currentUserRole === 'INVESTIGATOR' || currentUserRole === 'LEGAL_OFFICER') && (
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        style={{ padding: '0.25rem 0.5rem', fontSize: '0.725rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                        onClick={() => setUploadEvidenceOpen(true)}
+                      >
+                        <Plus size={11} /> Upload Evidence
+                      </button>
+                    )}
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      style={{ padding: '0.25rem 0.5rem', fontSize: '0.725rem' }}
+                      onClick={() => setShareOpen(true)}
+                    >
+                      Share Dossier
+                    </button>
+                  </div>
                 </div>
 
                 <div style={{ padding: '1rem' }}>
@@ -423,7 +581,17 @@ export const CaseManagement: React.FC<CaseManagementProps> = ({ currentUserRole 
                                         <HashDisplay hash={doc.sha256_hash} />
                                       )}
                                     </div>
-                                    <StatusBadge status="verified" size="sm" />
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+                                      <StatusBadge status="verified" size="sm" />
+                                      <button
+                                        className="btn btn-ghost btn-sm"
+                                        style={{ padding: '0.25rem' }}
+                                        onClick={() => handleDownload(doc.document_id || doc.id, doc.filename || doc.original_filename)}
+                                        title="Download decrypted evidence file"
+                                      >
+                                        <Download size={12} />
+                                      </button>
+                                    </div>
                                   </div>
                                 ))}
                               </div>
@@ -486,6 +654,227 @@ export const CaseManagement: React.FC<CaseManagementProps> = ({ currentUserRole 
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Create FIR Modal */}
+      {createFirOpen && selectedCase && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '500px' }}>
+            <div className="modal-header">
+              <h3>Create / Add FIR - Case {selectedCase.case_id}</h3>
+              <button className="modal-close" onClick={() => setCreateFirOpen(false)}>×</button>
+            </div>
+            <form onSubmit={handleCreateFir}>
+              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.625rem' }}>
+                  <div>
+                    <label className="text-label">FIR Number *</label>
+                    <input
+                      type="text"
+                      className="input"
+                      placeholder="e.g. FIR-2026-0034"
+                      value={firNumber}
+                      onChange={(e) => setFirNumber(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-label">Police Station *</label>
+                    <input
+                      type="text"
+                      className="input"
+                      placeholder="e.g. Connaught Place P.S."
+                      value={policeStation}
+                      onChange={(e) => setPoliceStation(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.625rem' }}>
+                  <div>
+                    <label className="text-label">Incident Date *</label>
+                    <input
+                      type="date"
+                      className="input"
+                      value={firDate}
+                      onChange={(e) => setFirDate(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-label">Investigating Officer *</label>
+                    <input
+                      type="text"
+                      className="input"
+                      placeholder="e.g. Inspector Arjun"
+                      value={firOfficer}
+                      onChange={(e) => setFirOfficer(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-label">Applicable Acts/Sections *</label>
+                  <input
+                    type="text"
+                    className="input"
+                    placeholder="e.g. Section 379 IPC, Section 420 IPC"
+                    value={applicableSections}
+                    onChange={(e) => setApplicableSections(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="text-label">FIR Details / Description *</label>
+                  <textarea
+                    className="input"
+                    rows={4}
+                    placeholder="Provide detailed description of the incident..."
+                    value={firDescription}
+                    onChange={(e) => setFirDescription(e.target.value)}
+                    style={{ resize: 'vertical' }}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="text-label">FIR Document Scan / Attachment (Optional)</label>
+                  <input
+                    type="file"
+                    className="input"
+                    onChange={(e) => setFirFile(e.target.files?.[0] || null)}
+                    accept=".pdf,.png,.jpg,.jpeg,.txt"
+                  />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setCreateFirOpen(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={submitting}>
+                  {submitting ? 'Ingesting...' : 'Ingest FIR'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Upload Evidence Modal */}
+      {uploadEvidenceOpen && selectedCase && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '450px' }}>
+            <div className="modal-header">
+              <h3>Upload Evidence: Case {selectedCase.case_id}</h3>
+              <button className="modal-close" onClick={() => setUploadEvidenceOpen(false)}>×</button>
+            </div>
+            <form onSubmit={handleUploadEvidence}>
+              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                <div>
+                  <label className="text-label">Document Type *</label>
+                  <select
+                    className="select"
+                    value={evidenceType}
+                    onChange={(e) => setEvidenceType(e.target.value)}
+                  >
+                    <option value="POLICE_REPORT">Police Report</option>
+                    <option value="INVESTIGATION_RECORD">Investigation Record</option>
+                    <option value="WITNESS_STATEMENT">Witness Statement</option>
+                    <option value="CHARGE_SHEET">Charge Sheet</option>
+                    <option value="FORENSIC_REPORT">Forensic Report</option>
+                    <option value="COURT_FILING">Court Filing</option>
+                    <option value="LEGAL_NOTICE">Legal Notice</option>
+                    <option value="JUDGMENT">Judgment</option>
+                    <option value="OTHER">Other Evidence Record</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-label">Brief Description *</label>
+                  <input
+                    type="text"
+                    className="input"
+                    placeholder="e.g. Crime scene photo, recovery memo"
+                    value={evidenceDescription}
+                    onChange={(e) => setEvidenceDescription(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="text-label">Select Evidence File *</label>
+                  <input
+                    type="file"
+                    className="input"
+                    onChange={(e) => setEvidenceFile(e.target.files?.[0] || null)}
+                    accept=".pdf,.png,.jpg,.jpeg,.txt"
+                    required
+                  />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setUploadEvidenceOpen(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={submitting}>
+                  {submitting ? 'Uploading...' : 'Secure Upload'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Cryptographic Pipeline Status Modal */}
+      {uploadFeedback && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '500px', borderColor: 'var(--accent-border)' }}>
+            <div className="modal-header" style={{ borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.75rem' }}>
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#10b981' }}>
+                <CheckCircle size={18} />
+                {uploadFeedback.message}
+              </h3>
+              <button className="modal-close" onClick={() => setUploadFeedback(null)}>×</button>
+            </div>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '1rem 0' }}>
+              <div style={{ padding: '0.75rem', background: 'var(--surface-raised)', borderRadius: 'var(--radius-sm)', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', fontSize: '0.8rem' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Filename:</span>
+                  <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{uploadFeedback.filename}</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', fontSize: '0.8rem' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Document ID:</span>
+                  <span className="text-mono" style={{ color: 'var(--accent-hover)' }}>{uploadFeedback.document_id}</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', fontSize: '0.8rem' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Case ID:</span>
+                  <span className="text-mono" style={{ color: 'var(--text-secondary)' }}>{uploadFeedback.case_id}</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', fontSize: '0.8rem' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Doc Type:</span>
+                  <span className="badge badge-blue" style={{ fontSize: '0.65rem', width: 'fit-content' }}>{uploadFeedback.document_type}</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', fontSize: '0.8rem' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Ingestion Time:</span>
+                  <span style={{ color: 'var(--text-primary)' }}>{new Date(uploadFeedback.created_at || Date.now()).toLocaleString()}</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', fontSize: '0.8rem' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Status:</span>
+                  <span className="badge badge-green" style={{ fontSize: '0.65rem', width: 'fit-content' }}>{uploadFeedback.status || 'ACTIVE'}</span>
+                </div>
+              </div>
+              <div>
+                <label className="text-label" style={{ marginBottom: '0.25rem', display: 'block' }}>Cryptographic SHA-256 Hash</label>
+                <HashDisplay hash={uploadFeedback.sha256} />
+              </div>
+              <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontStyle: 'italic', marginTop: '0.25rem' }}>
+                Note: The file bytes are encrypted with AES-256 (Fernet) and backed up in PostgreSQL DocumentFileStore. Hash anchoring transaction has been anchored to EVM blockchain.
+              </p>
+            </div>
+            <div className="modal-footer" style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '0.75rem' }}>
+              <button className="btn btn-primary" onClick={() => setUploadFeedback(null)}>Acknowledge & Close</button>
+            </div>
           </div>
         </div>
       )}

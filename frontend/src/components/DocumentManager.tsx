@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  FileText, UploadCloud, Search, Eye, RefreshCw, X, ShieldCheck, Lock, Key,
+  FileText, UploadCloud, Search, Eye, RefreshCw, X, ShieldCheck, Lock, Key, Download
 } from 'lucide-react';
 import { api, ensureArray } from '../services/api';
 import type { DocumentItem } from '../services/api';
@@ -81,6 +81,29 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({ currentUserRol
       fetchDocuments();
     } catch (err: any) {
       alert(err?.response?.data?.error || 'Failed to update compliance policies.');
+    }
+  };
+
+
+  const handleDownload = async (docId: string, filename: string) => {
+    try {
+      const response = await api.get(`/documents/${docId}/download/`, {
+        responseType: 'blob'
+      });
+      const contentType = response.headers['content-type'];
+      const mimeType = typeof contentType === 'string' ? contentType : undefined;
+      const blob = new Blob([response.data], { type: mimeType });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Error downloading file:", err);
+      alert("Failed to download decrypted file. You may not have access permission.");
     }
   };
 
@@ -374,6 +397,17 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({ currentUserRol
                       <div>
                         <div className="text-label" style={{ marginBottom: '0.25rem' }}>SHA-256 Hash</div>
                         <HashDisplay hash={selectedDoc.sha256_hash || '—'} />
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'flex-start', marginTop: '0.5rem' }}>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.75rem' }}
+                          onClick={() => handleDownload(selectedDoc.document_id || (selectedDoc as any).id, selectedDoc.filename || selectedDoc.original_filename)}
+                        >
+                          <Download size={12} />
+                          Download Decrypted File
+                        </button>
                       </div>
 
                       {/* Visual Timeline for Chain of Custody */}
