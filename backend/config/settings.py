@@ -82,7 +82,13 @@ from django.core.exceptions import ImproperlyConfigured
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 if DATABASE_URL and (DATABASE_URL.startswith("postgres://") or DATABASE_URL.startswith("postgresql://")):
     import dj_database_url  # type: ignore
-    DATABASES = {"default": dj_database_url.parse(DATABASE_URL)}
+    DATABASES = {
+        "default": dj_database_url.parse(
+            DATABASE_URL,
+            conn_max_age=600,
+            conn_health_checks=True,
+        )
+    }
 else:
     import sys
     # Enforce PostgreSQL in production or on Render runtime
