@@ -82,6 +82,7 @@ def ingest_document(
     uploaded_by,
     change_description: str = "Initial upload",
     manual_case=None,
+    manual_document_type: Optional[str] = None,
 ) -> dict:
     """
     Main document ingestion pipeline.
@@ -159,9 +160,12 @@ def ingest_document(
             logger.info("Running document intelligence...")
             ai_result = analyze_document(extracted_text)
 
-            document_type = ai_result.get("document_type", "UNKNOWN")
-            if document_type not in [c[0] for c in DocumentType.choices]:
-                document_type = "UNKNOWN"
+            if manual_document_type and manual_document_type in [c[0] for c in DocumentType.choices]:
+                document_type = manual_document_type
+            else:
+                document_type = ai_result.get("document_type", "UNKNOWN")
+                if document_type not in [c[0] for c in DocumentType.choices]:
+                    document_type = "UNKNOWN"
             document.document_type = document_type
 
             # Create DocumentMetadata

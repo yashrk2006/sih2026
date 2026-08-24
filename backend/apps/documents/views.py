@@ -37,6 +37,7 @@ def upload_document(request):
     file_obj = serializer.validated_data["file"]
     change_description = serializer.validated_data.get("change_description", "Initial upload")
     case_id = serializer.validated_data.get("case_id", "")
+    document_type = serializer.validated_data.get("document_type", "")
 
     # Resolve manual case if provided
     manual_case = None
@@ -64,6 +65,7 @@ def upload_document(request):
                 uploaded_by=request.user,
                 change_description=change_description,
                 manual_case=manual_case,
+                manual_document_type=document_type,
             )
             if not result["success"]:
                 raise ValueError(result["error"])

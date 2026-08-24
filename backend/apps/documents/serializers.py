@@ -80,3 +80,4 @@ class DocumentUploadSerializer(serializers.Serializer):
     file = serializers.FileField()
     change_description = serializers.CharField(required=False, default="Initial upload")
     case_id = serializers.CharField(required=False, allow_blank=True)
+    document_type = serializers.CharField(required=False, allow_blank=True)
