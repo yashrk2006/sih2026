@@ -913,7 +913,7 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({ currentUserRol
               </button>
             </div>
             <div style={{ padding: '1rem' }}>
-              <IngestionStudio onIngestionComplete={(res) => {
+              <IngestionStudio onIngestionComplete={() => {
                 setTimeout(() => {
                   setIsUploadModalOpen(false);
                   fetchDocuments();

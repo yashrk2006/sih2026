@@ -12,9 +12,12 @@ import { useConfetti } from '../hooks/useConfetti';
 
 interface HistoryEntry {
   timestamp: string;
-  document: string;
-  hash: string;
-  result: 'PASS' | 'FAIL';
+  documentName: string;
+  documentId: string;
+  verificationType: 'NORMAL' | 'SIMULATION';
+  originalHash: string;
+  computedHash: string;
+  result: 'PASS' | 'FAIL' | 'TAMPERING_DETECTED';
   verifiedBy: string;
 }
 
@@ -59,9 +62,8 @@ export const IntegrityVerification: React.FC = () => {
         verified: d.verified,
         status: d.status,
         expected_hash: d.expected_hash || d.stored_sha256 || '',
-        actual_hash: d.actual_hash || '',
+        actual_hash: d.actual_hash || d.current_sha256 || '',
         signature_status: d.signature_status,
-        // Only show blockchain status if the API explicitly returned it
         blockchain_status: d.blockchain_status ?? undefined,
         blockchain_tx: d.blockchain_tx ?? undefined,
         audit_status: 'AUDIT_CHAIN_VALID',
@@ -71,15 +73,17 @@ export const IntegrityVerification: React.FC = () => {
       setHistory((prev) => [
         {
           timestamp: new Date().toLocaleTimeString(),
-          document: (targetDoc as any)?.filename || (targetDoc as any)?.original_filename || 'document',
-          hash: result.expected_hash,
+          documentName: (targetDoc as any)?.filename || (targetDoc as any)?.original_filename || 'document',
+          documentId: docId,
+          verificationType: 'NORMAL',
+          originalHash: result.expected_hash,
+          computedHash: result.actual_hash || '',
           result: result.verified ? 'PASS' : 'FAIL',
-          verifiedBy: 'current_user',
+          verifiedBy: 'admin',
         },
         ...prev,
       ]);
     } catch (err: any) {
-      // Never silently pass — show a real error state so the UI is honest
       const errorResult: IntegrityVerificationResult = {
         verified: false,
         status: 'BACKEND_UNREACHABLE',
@@ -90,10 +94,13 @@ export const IntegrityVerification: React.FC = () => {
       setHistory((prev) => [
         {
           timestamp: new Date().toLocaleTimeString(),
-          document: (targetDoc as any)?.filename || 'document',
-          hash: errorResult.expected_hash,
+          documentName: (targetDoc as any)?.filename || (targetDoc as any)?.original_filename || 'document',
+          documentId: docId,
+          verificationType: 'NORMAL',
+          originalHash: errorResult.expected_hash,
+          computedHash: 'N/A',
           result: 'FAIL',
-          verifiedBy: 'current_user',
+          verifiedBy: 'admin',
         },
         ...prev,
       ]);
@@ -109,17 +116,19 @@ export const IntegrityVerification: React.FC = () => {
 
     const docId = targetDoc ? ((targetDoc as any).document_id || (targetDoc as any).id) : '';
     try {
-      // Real API call: backend decrypts the file, flips byte 512 in memory (never on disk),
-      // recomputes SHA-256 of the corrupted bytes and returns both hashes.
       const res = await api.post(`/documents/${docId}/tamper-test/`);
-      setTamperResult(res.data);
+      const data = res.data;
+      setTamperResult(data);
       setHistory((prev) => [
         {
           timestamp: new Date().toLocaleTimeString(),
-          document: (targetDoc as any)?.filename || 'document',
-          hash: res.data.tampered_sha256,
-          result: 'FAIL',
-          verifiedBy: 'current_user',
+          documentName: (targetDoc as any)?.filename || (targetDoc as any)?.original_filename || 'document',
+          documentId: docId,
+          verificationType: 'SIMULATION',
+          originalHash: data.original_sha256 || '',
+          computedHash: data.tampered_sha256 || '',
+          result: 'TAMPERING_DETECTED',
+          verifiedBy: 'admin',
         },
         ...prev,
       ]);
@@ -310,16 +319,18 @@ export const IntegrityVerification: React.FC = () => {
                   }
                   <div>
                     <div style={{ fontSize: '1rem', fontWeight: 700, color: verificationResult.verified ? 'var(--green-text)' : 'var(--red-text)' }}>
-                      {verificationResult.verified ? '✓ INTEGRITY VERIFIED' : '⚠ INTEGRITY FAILED'}
+                      {verificationResult.verified ? '✓ VERIFIED — Real Stored Document' : '⚠ INTEGRITY FAILED'}
                     </div>
                     <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
                       {verificationResult.verified
-                        ? 'SHA-256 fingerprint matches stored hash exactly. No modifications detected.'
-                        : 'Hash mismatch detected. Document may have been tampered with.'}
+                        ? 'SHA-256 fingerprint matches stored database hash exactly. Stored file is cryptographically intact.'
+                        : 'Hash mismatch detected. Document may have been modified or corrupted.'}
                     </div>
                   </div>
                 </div>
-                <StatusBadge status={verificationResult.status} />
+                <span className={`badge ${verificationResult.verified ? 'badge-green' : 'badge-red'}`}>
+                  {verificationResult.verified ? '✓ VERIFIED' : '⚠ FAILED'}
+                </span>
               </div>
 
               <div style={{ padding: '1rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.875rem' }}>
@@ -364,7 +375,7 @@ export const IntegrityVerification: React.FC = () => {
               <XCircle size={20} style={{ color: tamperResult.error ? 'var(--yellow-text, orange)' : 'var(--red-text)' }} />
               <div>
                 <div style={{ fontSize: '1rem', fontWeight: 700, color: tamperResult.error ? 'var(--yellow-text, orange)' : 'var(--red-text)' }}>
-                  {tamperResult.error ? '⚠ TAMPER TEST FAILED' : '⚠ TAMPERING DETECTED (IN-MEMORY)'}
+                  {tamperResult.error ? '⚠ TAMPER TEST FAILED' : '⚠ TAMPERING DETECTED (SIMULATION — STORED FILE UNTOUCHED)'}
                 </div>
                 <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
                   {tamperResult.error
@@ -373,7 +384,7 @@ export const IntegrityVerification: React.FC = () => {
                 </div>
               </div>
             </div>
-            <span className="badge badge-red">{tamperResult.error ? 'ERROR' : 'MISMATCH'}</span>
+            <span className="badge badge-red">⚠ SIMULATION</span>
           </div>
 
           {!tamperResult.error && tamperResult.tampered_sha256 && (
@@ -411,20 +422,40 @@ export const IntegrityVerification: React.FC = () => {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Time</th>
-                  <th>Document</th>
-                  <th>Hash</th>
+                  <th>Timestamp</th>
+                  <th>Document Name</th>
+                  <th>Document ID</th>
+                  <th>Check Type</th>
+                  <th>Original SHA-256</th>
+                  <th>Computed SHA-256</th>
                   <th>Result</th>
-                  <th>By</th>
+                  <th>Verified By</th>
                 </tr>
               </thead>
               <tbody>
                 {history.map((h, i) => (
                   <tr key={i}>
                     <td><span className="text-mono" style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{h.timestamp}</span></td>
-                    <td><span style={{ fontSize: '0.8125rem', color: 'var(--text-primary)' }}>{h.document}</span></td>
-                    <td><HashDisplay hash={h.hash} /></td>
-                    <td><StatusBadge status={h.result === 'PASS' ? 'verified' : 'tampered'} label={h.result} /></td>
+                    <td><span style={{ fontSize: '0.8125rem', color: 'var(--text-primary)', fontWeight: 500 }}>{h.documentName}</span></td>
+                    <td><span className="text-mono" style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{h.documentId}</span></td>
+                    <td>
+                      <span className={`badge ${h.verificationType === 'NORMAL' ? 'badge-green' : 'badge-red'}`} style={{ fontSize: '0.6rem' }}>
+                        {h.verificationType === 'NORMAL' ? '✓ VERIFIED' : '⚠ SIMULATION'}
+                      </span>
+                    </td>
+                    <td><HashDisplay hash={h.originalHash} /></td>
+                    <td>
+                      {h.computedHash === 'N/A' ? (
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>N/A</span>
+                      ) : (
+                        <HashDisplay hash={h.computedHash} />
+                      )}
+                    </td>
+                    <td>
+                      <span className={`badge ${h.result === 'PASS' ? 'badge-green' : 'badge-red'}`} style={{ fontSize: '0.65rem' }}>
+                        {h.result}
+                      </span>
+                    </td>
                     <td><span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>{h.verifiedBy}</span></td>
                   </tr>
                 ))}
