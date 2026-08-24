@@ -148,12 +148,42 @@ SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
-# ── CORS ──────────────────────────────────────────────────────────────────────
-CORS_ALLOW_ALL_ORIGINS = os.environ.get("CORS_ALLOW_ALL_ORIGINS", str(DEBUG)).lower() in ("true", "1", "yes")
-if not CORS_ALLOW_ALL_ORIGINS:
-    CORS_ALLOWED_ORIGINS = [
-        origin.strip() for origin in os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",") if origin.strip()
-    ]
+# ── CORS & CSRF ───────────────────────────────────────────────────────────────
+CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOWED_ORIGINS = [
+    "https://sih2026-tau.vercel.app",
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://sih2026-tau.vercel.app",
+]
+
+# Allow local Vite development server origins when DEBUG=True
+if DEBUG:
+    CORS_ALLOWED_ORIGINS.extend([
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+    ])
+    CSRF_TRUSTED_ORIGINS.extend([
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+    ])
+
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
+]
 
 # ── Localization ──────────────────────────────────────────────────────────────
 LANGUAGE_CODE = "en-us"
